@@ -532,14 +532,14 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
 
             print(f"\n\tStructure: {db_str}")
 
-            max_seq_pf = energy.calculate(seq, db_str, em)
-            print(f"\t\tMax Seq PF: {max_seq_pf}")
+            reference_seq_pf = energy.calculate(seq, db_str, em)
+            print(f"\t\tReference Seq PF: {reference_seq_pf}")
 
             seq_pf = seq_partition_fn(p_seq)
             print(f"\t\tRyan Seq PF: {seq_pf}")
 
-            if onp.abs(seq_pf - max_seq_pf) > tol:
-                failed_cases.append((seq, db_str, max_seq_pf, seq_pf))
+            if onp.abs(seq_pf - reference_seq_pf) > tol:
+                failed_cases.append((seq, db_str, reference_seq_pf, seq_pf))
                 print(utils.bcolors.FAIL + "\t\tFail!\n" + utils.bcolors.ENDC)
                 pdb.set_trace()
             else:
@@ -549,8 +549,8 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
         print(f"\nAll tests passed!")
     else:
         print(f"\nFailed tests:")
-        for seq, struct, max_seq_pf, seq_pf in failed_cases:
-            print(f"- {seq}, {struct} -- {max_seq_pf} (Max) vs. {seq_pf}")
+        for seq, struct, reference_seq_pf, seq_pf in failed_cases:
+            print(f"- {seq}, {struct} -- {reference_seq_pf} (Reference) vs. {seq_pf}")
 
 
 
@@ -597,11 +597,11 @@ if __name__ == "__main__":
     end = time.time()
     print(f"Ryan seq pf: {seq_pf}")
 
-    max_discrete_seq_pf = energy.calculate(seq, db_str, em)
-    print(f"Max discrete seq pf: {max_discrete_seq_pf}")
+    reference_discrete_seq_pf = energy.calculate(seq, db_str, em)
+    print(f"Reference discrete seq pf: {reference_discrete_seq_pf}")
 
-    # max_seq_pf = vienna.seq_partition(p_seq, db_str, em)
-    # print(f"Max seq pf: {max_discrete_seq_pf}")
+    # reference_seq_pf = vienna.seq_partition(p_seq, db_str, em)
+    # print(f"Reference seq pf: {reference_discrete_seq_pf}")
 
 
     pdb.set_trace()

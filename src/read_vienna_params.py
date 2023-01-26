@@ -369,7 +369,7 @@ def postprocess_data(data, max_precompute):
     return postprocessed_data
 
 
-def read(param_path="../misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True):
+def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True):
     with open(param_path, 'r') as f:
         # param_text = f.read()
         param_lines = f.readlines()
@@ -490,7 +490,7 @@ def read(param_path="../misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE,
 
 
 if __name__ == "__main__":
-    params_dir = "../misc"
+    params_dir = "misc"
     params_fname = "rna_turner2004.par"
     # params_fname = "rna_turner1999.par"
     params_path = f"{params_dir}/{params_fname}"

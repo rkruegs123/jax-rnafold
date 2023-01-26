@@ -261,7 +261,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             # all_zs_sms = vmap(get_z_all_bs_sm)(zs)
             z_offsets = jnp.arange(two_loop_length)
             all_zs_sms = vmap(get_z_all_bs_sm)(z_offsets)
-            
+
             bp_1n_sm += jnp.sum(all_zs_sms)
             return bp_1n_sm
 
@@ -282,7 +282,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
         def get_bp_general_sm(bp, k_offset, l_offset):
             k = k_offset + i + 2
             l = l_offset + k + 1 # note: uses the k from above that includes k_offset. Order matters here.
-            
+
             bk = bp[0]
             bl = bp[1]
             idx_cond = (k >= i+2) & (k < j-2) & (l >= k+1) & (l < j-1)
@@ -424,7 +424,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
         get_j_inner_sms = vmap(get_j_inner_sms, (None, None, 0, None, None, None))
         get_j_inner_sms = vmap(get_j_inner_sms, (None, 0, None, None, None, None))
         get_j_inner_sms = vmap(get_j_inner_sms, (0, None, None, None, None, None))
-        
+
         def update_carry_ij(carry, j):
             j_inner_sms = get_j_inner_sms(N4, N4, N4, N4, jnp.arange(3), j)
             # ML = ML.at[:, :, :, :, :, i, j].set(j_inner_sms)
@@ -435,7 +435,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
         ML = ML.at[:, :, :, :, :, i, :].set(jnp.moveaxis(all_j_inner_sms, 0, -1))
         return ML
         """
-        
+
         get_all_inner_sms = vmap(get_inner_sm, (None, None, None, None, None, 0))
         get_all_inner_sms = vmap(get_all_inner_sms, (None, None, None, None, 0, None))
         get_all_inner_sms = vmap(get_all_inner_sms, (None, None, None, 0, None, None))
@@ -736,13 +736,13 @@ if __name__ == "__main__":
     em = energy.JaxNNModel()
     ss_partition_fn = get_ss_partition_fn(em, n)
     grad_ss_partition_fn = jit(grad(ss_partition_fn))
-    
+
     start = time.time()
     # ss_partition_fn(p_seq)
     # ryan_val, ryan_grad = jit(value_and_grad(ss_partition_fn))(p_seq)
     ryan_grad = grad_ss_partition_fn(p_seq)
     # ryan_val = jit(ss_partition_fn)(p_seq)
-    # max_val = vienna.ss_partition(p_seq, em)
+    # reference_val = vienna.ss_partition(p_seq, em)
     end = time.time()
     print(f"Total time: {onp.round(end - start, 2)}")
 
@@ -751,12 +751,3 @@ if __name__ == "__main__":
     end = time.time()
     print(f"Total time: {onp.round(end - start, 2)}")
     pdb.set_trace()
-
-    """
-    disagreement = jnp.array(jnp.nonzero(1 - jnp.isclose(ryan_ML, max_ML).astype(int)))
-    for i in range(disagreement.shape[1]):
-        idxs = disagreement[:, i]
-        rk = ryan_ML[idxs[0], idxs[1], idxs[2], idxs[3], idxs[4], idxs[5], idxs[6]]
-        mw = max_ML[idxs[0], idxs[1], idxs[2], idxs[3], idxs[4], idxs[5], idxs[6]]
-        print(f"{onp.round(rk, 4)} vs {onp.round(mw, 4)}")
-    """

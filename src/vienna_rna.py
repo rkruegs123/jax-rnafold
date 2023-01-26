@@ -16,7 +16,7 @@ def vienna_energy(seq, struct):
     # centroid_en = fc.eval_structure(centroid_struct)
 
     struct_en = fc.eval_structure(struct)
-    # NOTE: RNA.eval_structure_simple(seq, structure, verbose=1). Can also run Marco's code with --verbose flag.
+    # NOTE: RNA.eval_structure_simple(seq, structure, verbose=1).
     return struct_en
 
 def get_vienna_pf(seq):
