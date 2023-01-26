@@ -17,7 +17,7 @@ config.update("jax_enable_x64", True)
 
 import energy
 from checkpoint import checkpoint_scan
-from utils import bp_bases, HAIRPIN, N4, INVALID_BASE
+from utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
 from utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from utils import matching_to_db
@@ -39,7 +39,7 @@ def design_seq_for_struct(db_str,
     em = energy.JaxNNModel()
 
     seq_pf_fn = jit(get_seq_partition_fn(em, db_str))
-    ss_pf_fn = jit(get_ss_partition_fn(em))
+    ss_pf_fn = jit(get_ss_partition_fn(em, n))
 
     def neg_log_prob_fn(params, key, temp):
         curr_logits = params['seq_logits']
@@ -183,7 +183,7 @@ def run_all(optimizer="rms-prop", lr=0.1, n_iter=200, data_basedir=Path("data/")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         run_name = f"{name}_{timestamp}"
         run_dir = data_basedir / run_name
-        # run_dir.mkdir(parents=False, exist_ok=False)
+        run_dir.mkdir(parents=False, exist_ok=False)
 
         with open(run_dir / "params.txt", "w+") as f:
             f.write(params_str)
@@ -257,7 +257,7 @@ if __name__ == "__main__":
     p_seq = jnp.array(seq_to_one_hot(multilooping_fun_answer))
 
     seq_pf_fn = jit(get_seq_partition_fn(em, multilooping_fun))
-    ss_pf_fn = jit(get_ss_partition_fn(em))
+    ss_pf_fn = jit(get_ss_partition_fn(em, len(multilooping_fun)))
 
     seq_pf = seq_pf_fn(p_seq)
     ss_pf = ss_pf_fn(p_seq)
