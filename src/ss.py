@@ -42,7 +42,7 @@ else:
                              checkpoint_every=checkpoint_every)
 
 
-# TODO (RK): remove all unnecessary n parameterizations
+# TODO: remove all unnecessary n parameterizations
 def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
     two_loop_length = min(seq_len, max_loop)
 
