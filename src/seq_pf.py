@@ -536,7 +536,7 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
             print(f"\t\tReference Seq PF: {reference_seq_pf}")
 
             seq_pf = seq_partition_fn(p_seq)
-            print(f"\t\tRyan Seq PF: {seq_pf}")
+            print(f"\t\tOur Seq PF: {seq_pf}")
 
             if onp.abs(seq_pf - reference_seq_pf) > tol:
                 failed_cases.append((seq, db_str, reference_seq_pf, seq_pf))
@@ -595,7 +595,7 @@ if __name__ == "__main__":
     start = time.time()
     seq_pf = seq_partition_fn(p_seq)
     end = time.time()
-    print(f"Ryan seq pf: {seq_pf}")
+    print(f"Our seq pf: {seq_pf}")
 
     reference_discrete_seq_pf = energy.calculate(seq, db_str, em)
     print(f"Reference discrete seq pf: {reference_discrete_seq_pf}")
