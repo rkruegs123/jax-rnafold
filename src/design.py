@@ -17,7 +17,7 @@ config.update("jax_enable_x64", True)
 
 import energy
 from checkpoint import checkpoint_scan
-from utils import bp_bases, HAIRPIN, N4, INVALID_BASE
+from utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
 from utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from utils import matching_to_db
@@ -39,7 +39,7 @@ def design_seq_for_struct(db_str,
     em = energy.JaxNNModel()
 
     seq_pf_fn = jit(get_seq_partition_fn(em, db_str))
-    ss_pf_fn = jit(get_ss_partition_fn(em))
+    ss_pf_fn = jit(get_ss_partition_fn(em, n))
 
     def neg_log_prob_fn(params, key, temp):
         curr_logits = params['seq_logits']
@@ -55,11 +55,6 @@ def design_seq_for_struct(db_str,
     log_prob_grad = jit(log_prob_grad)
 
 
-    # lo = 0
-    # hi = 100
-    # seq_logits = onp.random.uniform(low=lo, high=hi, size=(n, 4))
-    # seq_logits = jnp.array(seq_logits, dtype=jnp.float64)
-
     seq_logits = onp.full((n, 4), 5)
     seq_logits = jnp.array(seq_logits, dtype=jnp.float64)
 
@@ -67,10 +62,6 @@ def design_seq_for_struct(db_str,
     if optimizer == "rms-prop":
         optimizer = optax.rmsprop(learning_rate=lr)
     else:
-        # optimizer = optax.adam(lr)
-        # optimizer = optax.noisy_sgd(learning_rate=lr)
-        # optimizer = optax.optimistic_gradient_descent(learning_rate=lr)
-        # optimizer = optax.amsgrad(learning_rate=lr)
         raise RuntimeError(f"Invalid choice of optimizer: {optimizer}")
     params = {'seq_logits': seq_logits}
 
@@ -183,7 +174,7 @@ def run_all(optimizer="rms-prop", lr=0.1, n_iter=200, data_basedir=Path("data/")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         run_name = f"{name}_{timestamp}"
         run_dir = data_basedir / run_name
-        # run_dir.mkdir(parents=False, exist_ok=False)
+        run_dir.mkdir(parents=False, exist_ok=False)
 
         with open(run_dir / "params.txt", "w+") as f:
             f.write(params_str)
@@ -228,40 +219,16 @@ if __name__ == "__main__":
     # get_structs_within_length(50)
     # pdb.set_trace()
 
-    from utils import RNA_ALPHA
-
-    # test_struct = "(...)"
-    # test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
-    # test_struct = "(((.(..((.((....)).((....)).))..).(....).)))" # multilooping fun
-    # test_struct = "..........((((....))))((((....))))((((...))))" # frog foot
-    # test_struct = ".....(((.(..(.(((((.((((.((...)))).))))((((((...)).))))..(((...)))...))).)..).)))...................." # kudzu
-    # test_struct = "((((((.((((....))))))).))).........." # prion pseudoknot
-    test_struct = "((((((((((((((((((((((((((...))))))....)))))))....))))))....)))))))" # square
-    # test_struct = "((((((.....(((....(((...(((((.............)))))....)))..)))..))))))" # snoRNA SNORD64
-    # test_struct = "(((((((.(.(.(.(((((((....)))))))))))))))))" # InfoRNA bulge test 9
-    # test_struct = "((((......(((((...))).((....)).........)).....))))" # misfolded aptamer
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=5)
-    pdb.set_trace()
+    """
+    test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=100)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]
     fin_seq = ''.join(nucs)
     print(f"Final argmax sequence: {fin_seq}")
+    """
 
-    pdb.set_trace()
 
 
-    em = energy.JaxNNModel()
-    multilooping_fun = "(((.(..((.((....)).((....)).))..).(....).)))"
-    multilooping_fun_answer = "GCCAGGACCAGCGAAAGCAGCGAAAGCAGGGACACUACGGGGGC"
-    p_seq = jnp.array(seq_to_one_hot(multilooping_fun_answer))
 
-    seq_pf_fn = jit(get_seq_partition_fn(em, multilooping_fun))
-    ss_pf_fn = jit(get_ss_partition_fn(em))
-
-    seq_pf = seq_pf_fn(p_seq)
-    ss_pf = ss_pf_fn(p_seq)
-    prob = seq_pf / ss_pf
-    log_prob = jnp.log(prob)
-    print(f"Probability: {prob}")
-    print(f"Log-prob: {log_prob}")

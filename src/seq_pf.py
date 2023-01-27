@@ -126,7 +126,7 @@ def get_seq_partition_fn(em, db):
         get_all_inner_sms = vmap(get_all_inner_sms, (None, None, 0, None, None, None))
         get_all_inner_sms = vmap(get_all_inner_sms, (None, 0, None, None, None, None))
         get_all_inner_sms = vmap(get_all_inner_sms, (0, None, None, None, None, None))
-        js = jnp.arange(n+2) # FIXME: is this correct?
+        js = jnp.arange(n+2)
         all_inner_sms = get_all_inner_sms(N4, N4, N4, N4, jnp.arange(3), js)
         ML = ML.at[:, :, :, :, :, i, :].set(all_inner_sms)
         return ML
@@ -180,7 +180,7 @@ def get_seq_partition_fn(em, db):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
                 return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
-            ks = jnp.arange(n+1) # FIXME: is this correct?
+            ks = jnp.arange(n+1)
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
             pr *= jnp.prod(prs)
@@ -219,7 +219,7 @@ def get_seq_partition_fn(em, db):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
                 return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
-            ks = jnp.arange(n+1) # FIXME: is this correct?
+            ks = jnp.arange(n+1)
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
             pr *= jnp.prod(prs)
@@ -291,7 +291,7 @@ def get_seq_partition_fn(em, db):
             return jnp.where(cond, bp_kl_sm, 0.0) # default is 0.0 because we will sum
 
         def get_bp_all_kl(bp):
-            all_kls = jnp.arange(n+1) # FIXME: is this the appropriate size? Will we be missing anything?
+            all_kls = jnp.arange(n+1)
             all_bp_kl_sms = vmap(get_bp_kl, (None, 0))(bp, all_kls)
             return jnp.sum(all_bp_kl_sms)
 
@@ -340,7 +340,7 @@ def get_seq_partition_fn(em, db):
                 cond = (z >= i+3) & (z < j-2)
                 return jnp.where(cond, all_bs_sm, 0.0)
 
-            zs = jnp.arange(n+2) # FIXME: is this the right range? Does it miss anything?
+            zs = jnp.arange(n+2)
             all_zs_sms = vmap(get_z_all_bs_sm)(zs)
             bp_1n_sm += jnp.sum(all_zs_sms)
             return bp_1n_sm
@@ -395,8 +395,7 @@ def get_seq_partition_fn(em, db):
             all_1n_sms = vmap(vmap(get_bp_1n_sm, (None, 0, None)), (None, None, 0))(bp, N4, N4)
             bp_sum += jnp.sum(all_1n_sms)
 
-            ks = jnp.arange(n+2) # FIXME: is this correct?
-            # ls = jnp.arange(n+2) # FIXME: is this correct?
+            ks = jnp.arange(n+2)
             # all_gen_sms = vmap(vmap(get_bp_general_sm, (None, 0, None)), (None, None, 0))(bp, ks, ls)
             all_gen_sms = vmap(get_bp_general_sm, (None, 0))(bp, ks)
             bp_sum += jnp.sum(all_gen_sms)
@@ -566,24 +565,12 @@ if __name__ == "__main__":
     fuzz_test(n=24, num_seq=10, em=em, tol=1e-6)
     pdb.set_trace()
 
-    # seq = "CAAAG"
-    # db_str = "(...)"
-
-    # seq = "AAACGGGCAUAACAUC"
-    # db_str = "....(((.....).))"
-
-    # seq = "ACAUACAGGUUUAGUAAUUGGCUU"
-    # db_str = "(((.(....).).)(....)..)."
-    # db_str = "..(.(....(.....).).....)"
 
     # seq = "GGAAACGAAACC"
     # db_str = "((...)(...))" # simple multiloop
 
     seq = "CAUACAGGUUUAGUAAUUGGC"
     db_str = "((.(....).).)(....).."
-    # seq = "ACAUACAGGUUUAGUAAUUGGCUU"
-    # db_str = "(((.(....).).)(....)..)."
-    pdb.set_trace()
 
 
     p_seq = jnp.array(seq_to_one_hot(seq))
@@ -602,6 +589,5 @@ if __name__ == "__main__":
 
     # reference_seq_pf = vienna.seq_partition(p_seq, db_str, em)
     # print(f"Reference seq pf: {reference_discrete_seq_pf}")
-
 
     pdb.set_trace()

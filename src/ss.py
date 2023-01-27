@@ -27,10 +27,6 @@ from utils import get_rand_seq, seq_to_one_hot
 import vienna
 
 
-# em = energy.All1Model()
-# em = energy.RandomModel()
-# em = energy.RandomHairpinModel()
-# em = energy.JaxNNModel()
 
 f64 = jnp.float64
 
@@ -76,7 +72,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
         ls = jnp.arange(seq_len+2)
         all_bp_mms = vmap(get_all_bp_all_mms)(ls)
-        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here. Hope that is correct.
+        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here. 
         OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T)
         return OMM
 
@@ -144,11 +140,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
             start_pos = SPECIAL_HAIRPIN_START_POS[id]
             end_pos = start_pos + sp_hairpin_len - 1
-            """
-            id_valid = (SPECIAL_HAIRPINS[id][0] == RNA_ALPHA[bi]) \
-                       & (SPECIAL_HAIRPINS[id][-1] == RNA_ALPHA[bj]) \
-                       & (SPECIAL_HAIRPIN_LENS[id] == up2)
-            """
+
             id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
                        & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
                        & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
@@ -416,26 +408,6 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             return jnp.where(cond, sm, ML[bim1, bi, bj, bjp1, nb, i, j])
         # Note: we do the reverse order of in_axes here rather than taking the transpose. Could use elsewhere.
 
-        """
-        # get_j_inner_sms = vmap(get_inner_sm, (None, None, None, None, None, 0))
-        # get_j_inner_sms = vmap(get_j_inner_sms, (None, None, None, None, 0, None))
-        get_j_inner_sms = vmap(get_inner_sm, (None, None, None, None, 0, None))
-        get_j_inner_sms = vmap(get_j_inner_sms, (None, None, None, 0, None, None))
-        get_j_inner_sms = vmap(get_j_inner_sms, (None, None, 0, None, None, None))
-        get_j_inner_sms = vmap(get_j_inner_sms, (None, 0, None, None, None, None))
-        get_j_inner_sms = vmap(get_j_inner_sms, (0, None, None, None, None, None))
-
-        def update_carry_ij(carry, j):
-            j_inner_sms = get_j_inner_sms(N4, N4, N4, N4, jnp.arange(3), j)
-            # ML = ML.at[:, :, :, :, :, i, j].set(j_inner_sms)
-            return None, j_inner_sms
-
-        js = jnp.arange(seq_len+2)
-        _, all_j_inner_sms = scan(update_carry_ij, None, js)
-        ML = ML.at[:, :, :, :, :, i, :].set(jnp.moveaxis(all_j_inner_sms, 0, -1))
-        return ML
-        """
-
         get_all_inner_sms = vmap(get_inner_sm, (None, None, None, None, None, 0))
         get_all_inner_sms = vmap(get_all_inner_sms, (None, None, None, None, 0, None))
         get_all_inner_sms = vmap(get_all_inner_sms, (None, None, None, 0, None, None))
@@ -471,19 +443,17 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             all_j_bj_bjp1_fn = vmap(vmap(vmap(j_bj_bjp1_fn, (None, None, 0)),
                                          (None, 0, None)),
                                     (0, None, None))
-            js = jnp.arange(seq_len+1) # FIXME: is this correct?
+            js = jnp.arange(seq_len+1)
             sm += jnp.sum(all_j_bj_bjp1_fn(js, N4, N4))
             return sm
 
-        get_all_bim1_bi_sms = vmap(vmap(bim1_bi_fn, (None, 0)), (0, None)) # Note: I hope I got this ordering right. They are both (4,) so won't throw an error if wrong
+        get_all_bim1_bi_sms = vmap(vmap(bim1_bi_fn, (None, 0)), (0, None)) # Note: Have to be careful about getting ordering right. They are both (4,) so won't throw an error if wrong
         all_bim1_bi_sms = get_all_bim1_bi_sms(N4, N4)
         E = E.at[:, :, i].set(all_bim1_bi_sms)
         return E
 
 
     def ss_partition(p_seq):
-        # n = p_seq.shape[0]
-        # n = seq_len
 
         # Pad appropriately
         padded_p_seq = jnp.zeros((seq_len+2, 4), dtype=f64)
@@ -564,8 +534,8 @@ class TestPartitionFunction(unittest.TestCase):
         # em = energy.RandomILModel()
         # em = energy.RandomHairpinModel()
 
-        # self._brute_model_test(em, n)
-        self._max_ss_test(em, n)
+        self._brute_model_test(em, n)
+        # self._max_ss_test(em, n)
 
 
     def _test_all_1_model_to_10(self):
@@ -585,8 +555,7 @@ class TestPartitionFunction(unittest.TestCase):
 
     def _test_random_model_to_10(self):
         print("Starting test: [test_random_model_to_10]")
-        for n in range(1, 30):
-        # for n in range(10, 20):
+        for n in range(1, 10):
             self._random_test(n)
 
     def test_nn_to_8(self):
@@ -600,8 +569,6 @@ class TestPartitionFunction(unittest.TestCase):
 
             for _ in range(n_seq):
                 seq = get_rand_seq(n)
-                # seq = "GGCACAGGCGU"
-                # seq = "GGGCUAUCGAC"
                 p_seq = jnp.array(seq_to_one_hot(seq))
 
                 start = time.time()
