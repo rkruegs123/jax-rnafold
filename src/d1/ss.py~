@@ -1,0 +1,2 @@
+def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
+    two_loop_length = min(seq_len, max_loop)

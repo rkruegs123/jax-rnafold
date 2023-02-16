@@ -12,19 +12,19 @@ import jax.numpy as jnp
 from jax.config import config
 config.update("jax_enable_x64", True)
 
-import energy
-from checkpoint import checkpoint_scan
-from utils import bp_bases, HAIRPIN, N4, INVALID_BASE
-from utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
+from d2 import energy
+from common.checkpoint import checkpoint_scan
+from common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE
+from common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
-from utils import matching_to_db
-from utils import MAX_PRECOMPUTE, MAX_LOOP
-import brute_force
-import nussinov as nus
+from common.utils import matching_to_db
+from common.utils import MAX_PRECOMPUTE, MAX_LOOP
+from common import brute_force
+from common import nussinov as nus
 
-import dp_discrete
-from utils import get_rand_seq, seq_to_one_hot
-import vienna
+from d2 import dp_discrete
+from common.utils import get_rand_seq, seq_to_one_hot
+from d2 import reference
 
 
 
@@ -72,7 +72,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
         ls = jnp.arange(seq_len+2)
         all_bp_mms = vmap(get_all_bp_all_mms)(ls)
-        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here. 
+        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here.
         OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T)
         return OMM
 
@@ -523,7 +523,7 @@ class TestPartitionFunction(unittest.TestCase):
         p_seq = self._random_p_seq(n)
         ss_partition_fn = get_ss_partition_fn(em, n)
         vien = ss_partition_fn(p_seq)
-        max = vienna.ss_partition(p_seq, em)
+        max = reference.ss_partition(p_seq, em)
         print(n, max, vien)
         self.assertAlmostEqual(max, vien, places=7)
 
@@ -588,7 +588,7 @@ class TestPartitionFunction(unittest.TestCase):
                 """
                 em = energy.NNModel()
                 start = time.time()
-                max_pf = vienna.ss_partition(p_seq, em)
+                max_pf = reference.ss_partition(p_seq, em)
                 end = time.time()
                 print(f"Non-vmapped fuzzy-compatible SS partition took: {onp.round(end - start, 2)} seconds")
 
@@ -684,7 +684,7 @@ if __name__ == "__main__":
     """
 
 
-    import vienna
+    from d2 import reference
 
 
     n = 256
@@ -709,7 +709,7 @@ if __name__ == "__main__":
     # our_val, our_grad = jit(value_and_grad(ss_partition_fn))(p_seq)
     our_grad = grad_ss_partition_fn(p_seq)
     # our_val = jit(ss_partition_fn)(p_seq)
-    # reference_val = vienna.ss_partition(p_seq, em)
+    # reference_val = reference.ss_partition(p_seq, em)
     end = time.time()
     print(f"Total time: {onp.round(end - start, 2)}")
 
