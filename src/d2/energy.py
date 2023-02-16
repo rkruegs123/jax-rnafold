@@ -7,14 +7,14 @@ import jax.numpy as jnp
 from jax.config import config
 config.update("jax_enable_x64", True)
 
-from utils import RNA_ALPHA, INVALID_BASE, RNA_ALPHA_IDX
-from utils import SPECIAL_HAIRPINS, N_SPECIAL_HAIRPINS, VALID_PAIRS
-from utils import boltz_onp, boltz_jnp
-from utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP
-from utils import all_pairs_mat, non_gc_pairs_mat
-import utils
+from common.utils import RNA_ALPHA, INVALID_BASE, RNA_ALPHA_IDX
+from common.utils import SPECIAL_HAIRPINS, N_SPECIAL_HAIRPINS, VALID_PAIRS
+from common.utils import boltz_onp, boltz_jnp
+from common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP
+from common.utils import all_pairs_mat, non_gc_pairs_mat
+from common import utils
 
-import read_vienna_params
+from common import read_vienna_params
 
 
 vienna_params = read_vienna_params.read(postprocess=False)
@@ -699,8 +699,8 @@ def calculate(seq, db, em: Model):
 def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
     import random
 
-    import vienna_rna
-    import sampling
+    from common import vienna_rna
+    from common import sampling
 
 
     beta = 1 / (kb*CELL_TEMP)
@@ -755,7 +755,7 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
             print(f"- {seq}, {struct} -- {vienna_dg} (Vienna) vs. {dg}")
 
 def test(seq, struct, em):
-    import vienna_rna
+    from common import vienna_rna
 
     beta = 1 / (kb*CELL_TEMP)
 

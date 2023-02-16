@@ -1,9 +1,9 @@
 import unittest
-from utils import ALL_PAIRS, RNA_ALPHA, NTS, NBPS, HAIRPIN, SPECIAL_HAIRPINS, INVALID_BASE
-import energy
+from common.utils import ALL_PAIRS, RNA_ALPHA, NTS, NBPS, HAIRPIN, SPECIAL_HAIRPINS, INVALID_BASE
+from d2 import energy
 import numpy as np
-import utils as common
-import brute_force
+from common import utils
+from common import brute_force
 
 
 def get_bp_bases(bp):
@@ -470,7 +470,7 @@ class TestPartitionFunction(unittest.TestCase):
         return p_seq
 
     def _all_1_test(self, n):
-        import nussinov as nus
+        import common.nussinov as nus
         em = energy.All1Model()
         p_seq = self._random_p_seq(n)
         nuss = nus.ss_partition(p_seq, en_pair=nus.en_pair_1)
@@ -482,7 +482,7 @@ class TestPartitionFunction(unittest.TestCase):
         p_seq = self._random_p_seq(n)
         vien = ss_partition(p_seq, em)
         brute = brute_force.ss_partition(p_seq, energy_fn=lambda seq, match: energy.calculate(
-            seq, common.matching_to_db(match), em))
+            seq, utils.matching_to_db(match), em))
         print(n, brute, vien)
         self.assertAlmostEqual(brute, vien, places=7)
 
@@ -506,14 +506,14 @@ class TestPartitionFunction(unittest.TestCase):
             self._random_test(n)
 
     def test_seq_one_hot(self):
-        import sampling
+        from common import sampling
         import random
         for n in range(1, 20):
-            seq = common.random_primary(n)
-            p_seq = common.one_hot_seq(seq)
+            seq = utils.random_primary(n)
+            p_seq = utils.one_hot_seq(seq)
             uss = sampling.UniformStructureSampler()
             uss.precomp(seq)
-            db = common.matching_to_db(uss.get_nth(
+            db = utils.matching_to_db(uss.get_nth(
                 random.randrange(0, uss.count_structures())))
             em = energy.RandomModel()
             e_calc = energy.calculate(seq, db, em)
@@ -522,14 +522,14 @@ class TestPartitionFunction(unittest.TestCase):
             self.assertAlmostEqual(e_calc, e_spart, places=7)
 
     def test_seq_brute(self):
-        import sampling
+        from common import sampling
         import random
         for it in range(5):
             for n in range(1, 11):
                 p_seq = self._random_p_seq(n)
                 uss = sampling.UniformStructureSampler()
                 uss.precomp([None]*n)
-                db = common.matching_to_db(uss.get_nth(random.randrange(0, uss.count_structures())))
+                db = utils.matching_to_db(uss.get_nth(random.randrange(0, uss.count_structures())))
                 em = energy.RandomModel()
                 e_brute = brute_force.seq_partition(p_seq, db, lambda seq, db: energy.calculate(seq, db, em))
                 e_spart = seq_partition(p_seq, db, em)

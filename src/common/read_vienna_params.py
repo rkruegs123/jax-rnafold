@@ -6,11 +6,28 @@ from copy import deepcopy
 
 import jax.numpy as jnp
 
-from utils import all_pairs_str, NON_GC_PAIRS
-from utils import CELL_TEMP, MAX_LOOP
+from common.utils import NON_GC_PAIRS, RNA_ALPHA, RNA_ALPHA_IDX
+from common.utils import CELL_TEMP, MAX_LOOP
+from common.utils import all_pairs_mat, MAX_PRECOMPUTE
 
 from jax.config import config
 config.update("jax_enable_x64", True)
+
+
+
+INF = 1e6
+
+seq_to_idx = {
+    "N": -1,
+    "A": 0,
+    "C": 1,
+    "G": 2,
+    "U": 3
+}
+idx_to_seq = {v: k for k, v in seq_to_idx.items()}
+all_pairs_sparse = jnp.where(all_pairs_mat == 1.0)
+all_pairs_sparse = jnp.array(list(zip(all_pairs_sparse[0], all_pairs_sparse[1])))
+all_pairs_str = [idx_to_seq[int(pair[0])] + idx_to_seq[int(pair[1])] for pair in all_pairs_sparse]
 
 
 def precompute_initiation(init_table, n):
@@ -21,7 +38,8 @@ def precompute_initiation(init_table, n):
         # extrapolated = init_table[MAX_LOOP] + np.round(1.07856 * np.log(u/MAX_LOOP), 2)
         extrapolated = init_table[MAX_LOOP] + np.floor(1.07856 * np.log(u/MAX_LOOP) * 100) / 100
         precomputed[u] = extrapolated
-    return jnp.array(precomputed)
+    # return jnp.array(precomputed)
+    return precomputed
 
 
 def process_stacking(stack_lines):
@@ -144,97 +162,105 @@ def process_dangle(dangle_lines):
     return dangle_data
 
 
+
 def postprocess_interior_mismatch(raw_interior_mismatch_data):
-    # Note: our flattened version represents the ordering if we take the tensor product of
-    # (mismatch 1 possibilities) and (mismatch 2 possibilities)
-    nucs = ['A', 'C', 'G', 'U']
-    flattened_int_mismatch_data = np.full((len(all_pairs_str) * len(nucs)**2,), np.nan, dtype=np.float64)
-    idx = 0
+    int_mismatch = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # int_mismatch[:] = np.nan # so that we get an error for invalid lookups
+    int_mismatch[:] = INF
     for p1 in all_pairs_str:
-        for n1 in nucs:
-            for n2 in nucs:
-                flattened_int_mismatch_data[idx] = raw_interior_mismatch_data[p1][n1+n2]
-                idx += 1
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for x, bx in enumerate(RNA_ALPHA):
+            for y, by in enumerate(RNA_ALPHA):
+                int_mismatch[i, j, x, y] = raw_interior_mismatch_data[p1][bx+by]
+    return jnp.array(int_mismatch)
 
-    return flattened_int_mismatch_data
-    """
-    # We take a kronecker *sum*, not product -- https://mathworld.wolfram.com/KroneckerSum.html
-    flattened_int_mismatch_data = np.kron(flattened_int_mismatch_data, np.ones(idx)) \
-                                  + np.kron(np.ones(idx), flattened_int_mismatch_data)
-    return flattened_int_mismatch_data
-    """
+# Note: stuff has to be put in jax arrays, so we don't keep as dictionaries
+# Note: use RNA_ALPHA indexing for postprocessing
+def postprocess_data(data, max_precompute):
 
-def postprocess(data, max_precompute, default_stack_energy=1e6):
-    nucs = ['A', 'C', 'G', 'U']
-    postprocessed_data = deepcopy(data)
+    # postprocessed_data = deepcopy(data)
+    postprocessed_data = dict()
 
-    # Stack
-    raw_stack_data = data['stack']
-    flattened_stack_data = np.full((len(all_pairs_str)**2,), np.nan, dtype=np.float64)
-
-    idx = 0
+    # Stacking
+    stacking = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # stacking[:] = np.nan # so that we get an error for invalid lookups
+    stacking[:] = INF
     for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
         for p2 in all_pairs_str:
-            p1_p2_dg = raw_stack_data[p1][p2]
-            flattened_stack_data[idx] = p1_p2_dg
-            idx += 1
-    postprocessed_data['stack'] = flattened_stack_data
+            k = RNA_ALPHA_IDX[p2[0]]
+            l = RNA_ALPHA_IDX[p2[1]]
+            stacking[i, j, k, l] = data['stack'][p1][p2]
+    stacking = jnp.array(stacking)
+    postprocessed_data['stack'] = stacking
 
     # Mismatch hairpin
-    raw_mis_hairpin_data = data['mismatch_hairpin']
-    flattened_mis_hairpin_data = np.empty((16*len(all_pairs_str),), dtype=np.float64)
-    idx = 0
-    for pair in all_pairs_str:
-        for n1 in nucs:
-            for n2 in nucs:
-                flattened_mis_hairpin_data[idx] = raw_mis_hairpin_data[pair][n1 + n2]
-                idx += 1
-    postprocessed_data['mismatch_hairpin'] = flattened_mis_hairpin_data
+    mismatch_hairpin = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # mismatch_hairpin[:] = np.nan # so that we get an error for invalid lookups
+    mismatch_hairpin[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for k, bk in enumerate(RNA_ALPHA):
+            for l, bl in enumerate(RNA_ALPHA):
+                mismatch_hairpin[i, j, k, l] = data['mismatch_hairpin'][p1][bk + bl]
+    mismatch_hairpin = jnp.array(mismatch_hairpin)
+    postprocessed_data['mismatch_hairpin'] = mismatch_hairpin
 
     # int11
-    raw_int11_data = data['int11']
-    n_int11 = len(all_pairs_str) * len(all_pairs_str) * len(nucs) * len(nucs)
-    flattened_int11_data = np.full((n_int11,), np.nan, dtype=np.float64)
-    idx = 0
-    for pair1 in all_pairs_str:
-        for pair2 in all_pairs_str:
-            for n1 in nucs:
-                for n2 in nucs:
-                    flattened_int11_data[idx] = raw_int11_data[pair1][pair2][n1][n2]
-                    idx += 1
-    postprocessed_data['int11'] = flattened_int11_data
+    int11 = np.empty((4, 4, 4, 4, 4, 4), dtype=np.float64)
+    # int11[:] = np.nan
+    int11[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for p2 in all_pairs_str:
+            k = RNA_ALPHA_IDX[p2[0]]
+            l = RNA_ALPHA_IDX[p2[1]]
+            # Note: ip1 and jm1 refer to the indices of bip1 and bjm1, not the integers i+1 and j-1
+            for ip1, bip1 in enumerate(RNA_ALPHA):
+                for jm1, bjm1 in enumerate(RNA_ALPHA):
+                    int11[i, j, k, l, ip1, jm1] = data['int11'][p1][p2][bip1][bjm1]
+    int11 = jnp.array(int11)
+    postprocessed_data['int11'] = int11
 
     # int21
-    raw_int21_data = data['int21']
-    n_int21 = len(all_pairs_str)**2 * len(nucs)**3
-    flattened_int21_data = np.full((n_int21,), np.nan, dtype=np.float64)
-    idx = 0
-    for pair1 in all_pairs_str:
-        for pair2 in all_pairs_str:
-            for n1 in nucs:
-                for n2 in nucs:
-                    n1n2 = n1 + n2
-                    for n3 in nucs:
-                        flattened_int21_data[idx] = raw_int21_data[pair1][pair2][n1n2][n3]
-                        idx += 1
-    postprocessed_data['int21'] = flattened_int21_data
+    int21 = np.empty((4, 4, 4, 4, 4, 4, 4), dtype=np.float64)
+    # int21[:] = np.nan
+    int21[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for p2 in all_pairs_str:
+            k = RNA_ALPHA_IDX[p2[0]]
+            l = RNA_ALPHA_IDX[p2[1]]
+            for x, bx in enumerate(RNA_ALPHA):
+                for y, by in enumerate(RNA_ALPHA):
+                    for z, bz in enumerate(RNA_ALPHA):
+                        int21[i, j, k, l, x, y, z] = data['int21'][p1][p2][bx+by][bz]
+    int21 = jnp.array(int21)
+    postprocessed_data['int21'] = int21
+
 
     # int22
-    raw_int22_data = data['int22']
-    n_int22 = len(all_pairs_str)**2 * len(nucs)**4
-    flattened_int22_data = np.full((n_int22,), np.nan, dtype=np.float64)
-    idx = 0
-    for pair1 in all_pairs_str:
-        for pair2 in all_pairs_str:
-            for n1 in nucs:
-                for n2 in nucs:
-                    n1n2 = n1 + n2
-                    for n3 in nucs:
-                        for n4 in nucs:
-                            n3n4 = n3 + n4
-                            flattened_int22_data[idx] = raw_int22_data[pair1][pair2][n1n2][n3n4]
-                            idx += 1
-    postprocessed_data['int22'] = flattened_int22_data
+    int22 = np.empty((4, 4, 4, 4, 4, 4, 4, 4), dtype=np.float64)
+    # int22[:] = np.nan
+    int22[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for p2 in all_pairs_str:
+            k = RNA_ALPHA_IDX[p2[0]]
+            l = RNA_ALPHA_IDX[p2[1]]
+            for w, bw in enumerate(RNA_ALPHA):
+                for x, bx in enumerate(RNA_ALPHA):
+                    for y, by in enumerate(RNA_ALPHA):
+                        for z, bz in enumerate(RNA_ALPHA):
+                            int22[i, j, k, l, w, x, y, z] = data['int22'][p1][p2][bw+bx][by+bz]
+    int22 = jnp.array(int22)
+    postprocessed_data['int22'] = int22
 
     # interior mismatches
     postprocessed_data['mismatch_interior'] = postprocess_interior_mismatch(data['mismatch_interior'])
@@ -242,72 +268,108 @@ def postprocess(data, max_precompute, default_stack_energy=1e6):
     postprocessed_data['mismatch_interior_23'] = postprocess_interior_mismatch(data['mismatch_interior_23'])
 
     # multiloop mismatches
-    raw_mismatch_multi_data = data['mismatch_multi']
-    flattened_mismatch_multi_data = np.empty((len(all_pairs_str)*16,), dtype=np.float64)
-    idx = 0
-    for pair in all_pairs_str:
-        for n1 in nucs:
-            for n2 in nucs:
-                flattened_mismatch_multi_data[idx] = raw_mismatch_multi_data[pair][n1 + n2]
-                idx += 1
-    postprocessed_data['mismatch_multi'] = flattened_mismatch_multi_data
-
+    mismatch_multi = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # mismatch_multi[:] = np.nan # so that we get an error for invalid lookups
+    mismatch_multi[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for x, bx in enumerate(RNA_ALPHA):
+            for y, by in enumerate(RNA_ALPHA):
+                mismatch_multi[i, j, x, y] = data['mismatch_multi'][p1][bx+by]
+    mismatch_multi = jnp.array(mismatch_multi)
+    postprocessed_data['mismatch_multi'] = mismatch_multi
 
     # exterior mismatches
-    raw_mismatch_exterior_data = data['mismatch_exterior']
-    flattened_mismatch_exterior_data = np.empty((len(all_pairs_str)*16,), dtype=np.float64)
-    idx = 0
-    for pair in all_pairs_str:
-        for n1 in nucs:
-            for n2 in nucs:
-                flattened_mismatch_exterior_data[idx] = raw_mismatch_exterior_data[pair][n1 + n2]
-                idx += 1
-    postprocessed_data['mismatch_exterior'] = flattened_mismatch_exterior_data
+    mismatch_exterior = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # mismatch_exterior[:] = np.nan # so that we get an error for invalid lookups
+    mismatch_exterior[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for x, bx in enumerate(RNA_ALPHA):
+            for y, by in enumerate(RNA_ALPHA):
+                mismatch_exterior[i, j, x, y] = data['mismatch_exterior'][p1][bx+by]
+    mismatch_exterior = jnp.array(mismatch_exterior)
+    postprocessed_data['mismatch_exterior'] = mismatch_exterior
 
     # dangle5 and dangle3
-    raw_dangle5_data = data['dangle5']
-    flattened_dangle5_data = np.empty((len(all_pairs_str)*4,), dtype=np.float64)
-    idx = 0
-    for pair in all_pairs_str:
-        for n in nucs:
-            flattened_dangle5_data[idx] = raw_dangle5_data[pair][n]
-            idx += 1
-    postprocessed_data['dangle5'] = flattened_dangle5_data
-
-    raw_dangle3_data = data['dangle3']
-    flattened_dangle3_data = np.empty((len(all_pairs_str)*4,), dtype=np.float64)
-    idx = 0
-    for pair in all_pairs_str:
-        for n in nucs:
-            flattened_dangle3_data[idx] = raw_dangle3_data[pair][n]
-            idx += 1
-    postprocessed_data['dangle3'] = flattened_dangle3_data
-
-    # non-GC closing penalty -- vectorize for compatability with 2-loops
-    non_gc_closing_penalty_two_loops = np.empty((len(all_pairs_str)**2,), dtype=np.float64)
-    idx = 0
+    dangle5 = np.empty((4, 4, 4), dtype=np.float64)
+    # dangle5[:] = np.nan
+    dangle5[:] = INF
     for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for x, bx in enumerate(RNA_ALPHA):
+            dangle5[i, j, x] = data['dangle5'][p1][bx]
+    dangle5 = jnp.array(dangle5)
+    postprocessed_data['dangle5'] = dangle5
+
+    dangle3 = np.empty((4, 4, 4), dtype=np.float64)
+    # dangle3[:] = np.nan
+    dangle3[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
+        for x, bx in enumerate(RNA_ALPHA):
+            dangle3[i, j, x] = data['dangle3'][p1][bx]
+    dangle3 = jnp.array(dangle3)
+    postprocessed_data['dangle3'] = dangle3
+
+    non_gc_closing_penalty_two_loops = np.empty((4, 4, 4, 4), dtype=np.float64)
+    # non_gc_closing_penalty_two_loops[:] = np.nan
+    non_gc_closing_penalty_two_loops[:] = INF
+    for p1 in all_pairs_str:
+        i = RNA_ALPHA_IDX[p1[0]]
+        j = RNA_ALPHA_IDX[p1[1]]
         p1_penalty = data['non_gc_closing_penalty'] if p1 in NON_GC_PAIRS else 0.0
         for p2 in all_pairs_str:
+            k = RNA_ALPHA_IDX[p2[0]]
+            l = RNA_ALPHA_IDX[p2[1]]
             p2_penalty = data['non_gc_closing_penalty'] if p2 in NON_GC_PAIRS else 0.0
-            non_gc_closing_penalty_two_loops[idx] = p1_penalty + p2_penalty
-            idx += 1
+            non_gc_closing_penalty_two_loops[i, j, k, l] = p1_penalty + p2_penalty
+    non_gc_closing_penalty_two_loops = jnp.array(non_gc_closing_penalty_two_loops)
     postprocessed_data['non_gc_closing_two_loop'] = non_gc_closing_penalty_two_loops
 
     # asymmetry
     asymmetry_matrix = np.empty((max_precompute, max_precompute), dtype=np.float64)
+    # asymmetry_matrix[:] = np.nan
+    asymmetry_matrix[:] = INF
     for n1 in range(max_precompute):
         for n2 in range(max_precompute):
             n1_n2_abs = np.abs(n1 - n2)
             n1_n2_dg = data['asymmetry'] * n1_n2_abs
             n1_n2_dg = np.min([n1_n2_dg, data['asymmetry_max']])
             asymmetry_matrix[n1, n2] = n1_n2_dg
-    postprocessed_data['asymmetry_matrix'] = jnp.array(asymmetry_matrix)
+    asymmetry_matrix = jnp.array(asymmetry_matrix)
+    postprocessed_data['asymmetry_matrix'] = asymmetry_matrix
 
+    # initiations
+    postprocessed_data['bulge'] = jnp.array(data['bulge'])
+    postprocessed_data['hairpin'] = jnp.array(data['hairpin'])
+    postprocessed_data['interior'] = jnp.array(data['interior'])
+
+    # scalars
+    postprocessed_data['ml_branch'] = jnp.float64(data['ml_branch'])
+    postprocessed_data['ml_unpaired'] = jnp.float64(data['ml_unpaired'])
+    postprocessed_data['ml_initiation'] = jnp.float64(data['ml_initiation'])
+    postprocessed_data['non_gc_closing_penalty'] = jnp.float64(data['non_gc_closing_penalty'])
+    postprocessed_data['asymmetry'] = jnp.float64(data['asymmetry'])
+    postprocessed_data['asymmetry_max'] = jnp.float64(data['asymmetry_max'])
+    postprocessed_data['duplex_init'] = jnp.float64(data['duplex_init'])
+
+    # special hairpins
+    postprocessed_data['triloops'] = data['triloops']
+    postprocessed_data['tetraloops'] = data['tetraloops']
+    postprocessed_data['hexaloops'] = data['hexaloops']
+
+    # print(set(data.keys()) - set(postprocessed_data.keys()))
+    # print(set(postprocessed_data.keys()) - set(data.keys()))
 
     return postprocessed_data
 
-def read(param_path="../misc/rna_turner2004.par", max_precompute=200):
+
+def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True):
     with open(param_path, 'r') as f:
         # param_text = f.read()
         param_lines = f.readlines()
@@ -325,6 +387,10 @@ def read(param_path="../misc/rna_turner2004.par", max_precompute=200):
             chunks.append(next_chunk)
             next_chunk = list()
         processed_line = re.sub("/\*.*\*/", "", l).strip() # remove comments
+        if not processed_line or processed_line.isspace():
+            # skip lines that only have comments
+            continue
+
         processed_line = processed_line.replace("INF", INF) # set inf to 1e6
         next_chunk.append(processed_line)
     chunks.append(next_chunk) # do the last one
@@ -342,7 +408,7 @@ def read(param_path="../misc/rna_turner2004.par", max_precompute=200):
 
         chunk_name = first_line.split('#')[-1].strip()
         if chunk_name == "stack":
-            chunk_data = chunk[2:]
+            chunk_data = chunk[1:]
             stack_data = process_stacking(chunk_data)
             data['stack'] = stack_data
         elif chunk_name == "bulge":
@@ -408,7 +474,7 @@ def read(param_path="../misc/rna_turner2004.par", max_precompute=200):
             mismatch_ext_data = process_int_multi_ext_mismatches(chunk_data)
             data['mismatch_exterior'] = mismatch_ext_data
         elif chunk_name in ["dangle5", "dangle3"]:
-            chunk_data = chunk[2:]
+            chunk_data = chunk[1:]
             dangle_data = process_dangle(chunk_data)
             data[chunk_name] = dangle_data
         elif chunk_name in ["Hexaloops", "Tetraloops", "Triloops"]:
@@ -419,18 +485,29 @@ def read(param_path="../misc/rna_turner2004.par", max_precompute=200):
                 seq, dg, dh = case.split()
                 special_hairpin_map[seq] = float(dg) / 100
             data[chunk_name] = special_hairpin_map
+        else:
+            print(f"WARNING: unprocessed chunk name: {chunk_name}")
 
 
-
-    # post process (subject to change)
-    return data, postprocess(data, max_precompute)
+    if postprocess:
+        data = postprocess_data(data, max_precompute)
+    return data
 
 
 
 
 if __name__ == "__main__":
-    params_dir = "../misc"
+    params_dir = "misc"
     params_fname = "rna_turner2004.par"
-    # params_fname = "rna_turner1999.par"
     params_path = f"{params_dir}/{params_fname}"
-    read(params_path)
+    params_2004 = read(params_path)
+
+    params_fname = "rna_turner1999.par"
+    params_path = f"{params_dir}/{params_fname}"
+    params_1999 = read(params_path)
+
+    pdb.set_trace()
+
+    params_fname = "vrna185x.par"
+    params_path = f"{params_dir}/{params_fname}"
+    params_vrna185x = read(params_path)

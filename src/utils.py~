@@ -1,2 +1,0 @@
-def get_bp_bases(bp):
-    return (RNA_ALPHA.index(ALL_PAIRS[bp][0]), RNA_ALPHA.index(ALL_PAIRS[bp][1]))

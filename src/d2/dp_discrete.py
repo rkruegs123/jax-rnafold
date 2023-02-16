@@ -7,20 +7,17 @@ from jax import grad, jit, value_and_grad, vmap
 import jax
 from jax.tree_util import Partial
 
-import read_vienna_params
-from utils import MIN_HAIRPIN_LENGTH, MAX_LOOP
-from utils import bcolors, CELL_TEMP, kb, R, beta, NON_GC_PAIRS, VALID_PAIRS
+from common import read_vienna_params
+from common.utils import HAIRPIN, MAX_LOOP
+from common.utils import bcolors, CELL_TEMP, kb, R, NON_GC_PAIRS, VALID_PAIRS
+from common.utils import boltz_onp
 
 from jax.config import config
 config.update("jax_enable_x64", True)
 
 
-vienna_params, _ = read_vienna_params.read() # read in the dictionary version, not the flattened version used for the fuzzy setting
-
-def boltz(x, t=CELL_TEMP):
-    beta = 1 / (kb*t)
-    return jnp.exp(-beta*x)
-
+vienna_params = read_vienna_params.read(postprocess=False) # read in the dictionary version, not the integer-indexed version
+MIN_HAIRPIN_LENGTH = HAIRPIN
 
 def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     if j - i - 1 < MIN_HAIRPIN_LENGTH:
@@ -36,11 +33,11 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     # Hairpin
     hairpin_seq = seq[i:j+1] # includes i and j
     if u == 3 and hairpin_seq in vienna_params['triloops'].keys():
-        sm = boltz(vienna_params['triloops'][hairpin_seq])
+        sm = boltz_onp(vienna_params['triloops'][hairpin_seq])
     elif u == 4 and hairpin_seq in vienna_params['tetraloops'].keys():
-        sm = boltz(vienna_params['tetraloops'][hairpin_seq])
+        sm = boltz_onp(vienna_params['tetraloops'][hairpin_seq])
     elif u == 6 and hairpin_seq in vienna_params['hexaloops'].keys():
-        sm = boltz(vienna_params['hexaloops'][hairpin_seq])
+        sm = boltz_onp(vienna_params['hexaloops'][hairpin_seq])
     else:
         hairpin_init_dg = vienna_params['hairpin'][u]
         hairpin_mismatch_dg = vienna_params['mismatch_hairpin'][pair][seq[i+1] + seq[j-1]]
@@ -50,7 +47,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
         hairpin_dg = jnp.where(u == 3,
                                hairpin_init_dg + hairpin_non_gc_closing_penalty,
                                hairpin_init_dg + hairpin_mismatch_dg)
-        hairpin_z = boltz(hairpin_dg)
+        hairpin_z = boltz_onp(hairpin_dg)
         sm = hairpin_z
 
     # One branch
@@ -59,7 +56,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j-1
     if seq[k] + seq[l] in VALID_PAIRS:
         stacking_dg = vienna_params['stack'][pair][seq[l] + seq[k]]
-        stacking_z = boltz(stacking_dg)
+        stacking_z = boltz_onp(stacking_dg)
         sm += stacking_z * paired_cache[k, l]
 
 
@@ -70,7 +67,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j-2
     if seq[k] + seq[l] in VALID_PAIRS:
         right_bulge_dg = vienna_params['bulge'][1] + vienna_params['stack'][pair][seq[l] + seq[k]]
-        right_bulge_z = boltz(right_bulge_dg)
+        right_bulge_z = boltz_onp(right_bulge_dg)
         sm += right_bulge_z * paired_cache[k, l]
 
 
@@ -86,7 +83,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
                 bulge_dg += vienna_params['non_gc_closing_penalty']
             if seq[l] + seq[k] in NON_GC_PAIRS:
                 bulge_dg += vienna_params['non_gc_closing_penalty']
-            bulge_z = boltz(bulge_dg)
+            bulge_z = boltz_onp(bulge_dg)
             sm += bulge_z * paired_cache[k, l]
 
     ### Left bulge, n=1
@@ -94,7 +91,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j - 1
     if seq[k] + seq[l] in VALID_PAIRS:
         left_bulge_dg = vienna_params['bulge'][1] + vienna_params['stack'][pair][seq[l] + seq[k]]
-        left_bulge_z = boltz(left_bulge_dg)
+        left_bulge_z = boltz_onp(left_bulge_dg)
         sm += left_bulge_z * paired_cache[k, l]
 
     ### Left bulge, n>1
@@ -106,7 +103,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
                 bulge_dg += vienna_params['non_gc_closing_penalty']
             if seq[l] + seq[k] in NON_GC_PAIRS:
                 bulge_dg += vienna_params['non_gc_closing_penalty']
-            bulge_z = boltz(bulge_dg)
+            bulge_z = boltz_onp(bulge_dg)
             sm += bulge_z * paired_cache[k, l]
 
 
@@ -117,7 +114,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j - 2
     if seq[k] + seq[l] in VALID_PAIRS:
         int11_dg = vienna_params['int11'][pair][seq[l] + seq[k]][seq[i+1]][seq[j-1]]
-        int11_z = boltz(int11_dg)
+        int11_z = boltz_onp(int11_dg)
         sm += int11_z * paired_cache[k, l]
 
 
@@ -126,7 +123,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j - 2
     if seq[k] + seq[l] in VALID_PAIRS:
         int21_dg = vienna_params['int21'][seq[l] + seq[k]][pair][seq[l+1] + seq[i+1]][seq[k-1]]
-        int21_z = boltz(int21_dg)
+        int21_z = boltz_onp(int21_dg)
         sm += int21_z * paired_cache[k, l]
 
 
@@ -135,7 +132,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     l = j - 3
     if seq[k] + seq[l] in VALID_PAIRS:
         int12_dg = vienna_params['int21'][pair][seq[l] + seq[k]][seq[i+1] + seq[l+1]][seq[j-1]]
-        int12_z = boltz(int12_dg)
+        int12_z = boltz_onp(int12_dg)
         sm += int12_z * paired_cache[k, l]
 
 
@@ -146,7 +143,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
         left_nucs = seq[i+1] + seq[i+2]
         right_nucs = seq[j-2] + seq[j-1]
         int22_dg = vienna_params['int22'][pair][seq[l] + seq[k]][left_nucs][right_nucs]
-        int22_z = boltz(int22_dg)
+        int22_z = boltz_onp(int22_dg)
         sm += int22_z * paired_cache[k, l]
 
 
@@ -167,7 +164,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
         mismatch_dg += vienna_params['mismatch_interior_23'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
         int32_dg = initiation_dg + asymmetry_dg + mismatch_dg
-        int32_z = boltz(int32_dg)
+        int32_z = boltz_onp(int32_dg)
         sm += int32_z * paired_cache[k, l]
 
     ### 2x3
@@ -187,7 +184,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
         mismatch_dg += vienna_params['mismatch_interior_23'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
         int23_dg = initiation_dg + asymmetry_dg + mismatch_dg
-        int23_z = boltz(int23_dg)
+        int23_z = boltz_onp(int23_dg)
         sm += int23_z * paired_cache[k, l]
 
 
@@ -209,7 +206,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
             mismatch_dg += vienna_params['mismatch_interior_1n'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
             int1n_dg = initiation_dg + asymmetry_dg + mismatch_dg
-            int1n_z = boltz(int1n_dg)
+            int1n_z = boltz_onp(int1n_dg)
             sm += int1n_z * paired_cache[k, l]
 
 
@@ -230,7 +227,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
             mismatch_dg += vienna_params['mismatch_interior_1n'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
             intN1_dg = initiation_dg + asymmetry_dg + mismatch_dg
-            intN1_z = boltz(intN1_dg)
+            intN1_z = boltz_onp(intN1_dg)
             sm += intN1_z * paired_cache[k, l]
 
 
@@ -251,7 +248,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
             mismatch_dg += vienna_params['mismatch_interior'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
             int2n_dg = initiation_dg + asymmetry_dg + mismatch_dg
-            int2n_z = boltz(int2n_dg)
+            int2n_z = boltz_onp(int2n_dg)
             sm += int2n_z * paired_cache[k, l]
 
     ### Nx2 (for n > 3)
@@ -271,7 +268,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
             mismatch_dg += vienna_params['mismatch_interior'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
             intN2_dg = initiation_dg + asymmetry_dg + mismatch_dg
-            intN2_z = boltz(intN2_dg)
+            intN2_z = boltz_onp(intN2_dg)
             sm += intN2_z * paired_cache[k, l]
 
 
@@ -292,7 +289,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
                 mismatch_dg += vienna_params['mismatch_interior'][seq[l] + seq[k]][seq[l+1] + seq[k-1]]
 
                 int_dg = initiation_dg + asymmetry_dg + mismatch_dg
-                int_z = boltz(int_dg)
+                int_z = boltz_onp(int_dg)
                 sm += int_z * paired_cache[k, l]
 
 
@@ -310,7 +307,7 @@ def _paired(i, j, paired_cache, multi_cache, seq, T=CELL_TEMP):
     dangle3 = j-1
     closing_pair_dg += vienna_params['mismatch_multi'][closing_pair][seq[dangle3] + seq[dangle5]]
 
-    sm += multi_cache[i+1, j-1, 2] * boltz(closing_pair_dg) # note that the closing pair (ji in this case) is considered a branch
+    sm += multi_cache[i+1, j-1, 2] * boltz_onp(closing_pair_dg) # note that the closing pair (ji in this case) is considered a branch
 
     return sm
 
@@ -319,7 +316,7 @@ def compute_multi_ij(i, j, paired_cache, multi_cache, seq):
 
     n = len(seq) # should really just pass around
     b = 0
-    sm = multi_cache[i+1, j, b] * boltz(vienna_params['ml_unpaired'])
+    sm = multi_cache[i+1, j, b] * boltz_onp(vienna_params['ml_unpaired'])
     # sm = multi_cache[i+1, j, b]
     for k in range(i+1, j+1): # j inclusive because we can make a branch all the way up to j
         branch_pair = seq[i] + seq[k]
@@ -341,12 +338,12 @@ def compute_multi_ij(i, j, paired_cache, multi_cache, seq):
             if dangle3 != -1:
                 branch_dg += vienna_params['dangle3'][branch_pair][seq[dangle3]]
 
-        sm += paired_cache[i][k] * multi_cache[k+1][j][b] * boltz(branch_dg) # note that we index with b, rather than b - 1. Implicitly is max(0, b-1)
+        sm += paired_cache[i][k] * multi_cache[k+1][j][b] * boltz_onp(branch_dg) # note that we index with b, rather than b - 1. Implicitly is max(0, b-1)
     multi_cache = multi_cache.at[i, j, b].set(sm)
 
     # b = 1, 2
     for b in range(1, 3):
-        sm = multi_cache[i+1, j, b] * boltz(vienna_params['ml_unpaired'])
+        sm = multi_cache[i+1, j, b] * boltz_onp(vienna_params['ml_unpaired'])
         for k in range(i+1, j+1): # note: when b=2, you will always hit a 0 for k=j
             branch_pair = seq[i] + seq[k]
             if branch_pair not in VALID_PAIRS:
@@ -368,7 +365,7 @@ def compute_multi_ij(i, j, paired_cache, multi_cache, seq):
                 if dangle3 != -1:
                     branch_dg += vienna_params['dangle3'][branch_pair][seq[dangle3]]
 
-            sm += paired_cache[i][k] * multi_cache[k+1][j][b-1] * boltz(branch_dg)
+            sm += paired_cache[i][k] * multi_cache[k+1][j][b-1] * boltz_onp(branch_dg)
         multi_cache = multi_cache.at[i, j, b].set(sm)
 
     return multi_cache
@@ -422,7 +419,7 @@ def fold(seq, n, # sequence information
                 if dangle3 != -1:
                     external_dg += vienna_params['dangle3'][external_pair][seq[dangle3]]
 
-            sm += paired_cache[i, k] * external_cache[k+1] * boltz(external_dg)
+            sm += paired_cache[i, k] * external_cache[k+1] * boltz_onp(external_dg)
         external_cache = external_cache.at[i].set(sm)
 
     return external_cache[0]
@@ -473,12 +470,12 @@ def compute_pf(seq):
 
 
 def test_dp():
-    from utils import get_rand_seq
-    import vienna
+    from common.utils import get_rand_seq
+    from common import vienna_rna
     import numpy as np
 
-    n = 29
-    num_seq = 5
+    n = 15
+    num_seq = 10
     test_seqs = [get_rand_seq(n) for _ in range(num_seq)]
     # test_seqs = ["UCAAAGCACGG"]
     # test_seqs = ["UGAUUUUCGAUAG"]
@@ -486,8 +483,8 @@ def test_dp():
 
     # test_seqs = ["GGAAACGAAACC"]
     # n = len(test_seqs[0])
-    test_seqs = ['GCCAGGACCAGCGAAAGCAGCGAAAGCAGGGACACUACGGGGGC']
-    n = len(test_seqs[0])
+    # test_seqs = ['GCCAGGACCAGCGAAAGCAGCGAAAGCAGGGACACUACGGGGGC']
+    # n = len(test_seqs[0])
     # test_seqs = ['GGACCAGCGAAAGCAGCGAAAGCAGGGAC']
 
 
@@ -499,10 +496,10 @@ def test_dp():
         pf = compute_pf(seq)
         print(f"\tComputed partition function: {pf}")
 
-        vienna_pf = vienna.get_vienna_pf(seq)
+        vienna_pf = vienna_rna.get_vienna_pf(seq)
         print(f"\tVienna partition function: {vienna_pf}")
 
-        diff_abs = np.abs(pf - vienna_pf)
+        diff_abs = onp.abs(pf - vienna_pf)
         print(f"\tDifference: {diff_abs}")
 
         if diff_abs > tol:

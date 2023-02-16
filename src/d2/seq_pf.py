@@ -12,18 +12,18 @@ import jax.numpy as jnp
 from jax.config import config
 config.update("jax_enable_x64", True)
 
-import energy
-from checkpoint import checkpoint_scan
-from utils import bp_bases, HAIRPIN, N4, INVALID_BASE
-from utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
+from d2 import energy
+from common.checkpoint import checkpoint_scan
+from common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE
+from common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
-from utils import matching_to_db
-from utils import MAX_PRECOMPUTE
-import brute_force
-import nussinov as nus
+from common.utils import matching_to_db
+from common.utils import MAX_PRECOMPUTE
+from common import brute_force
+from common import nussinov as nus
 
-import dp_discrete
-from utils import get_rand_seq, seq_to_one_hot
+from d2 import dp_discrete
+from common.utils import get_rand_seq, seq_to_one_hot
 
 
 f64 = jnp.float64
@@ -498,12 +498,12 @@ def get_seq_partition_fn(em, db):
 
 
 def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
-    import utils
+    from common import utils
     from tqdm import tqdm
     import random
 
-    import vienna_rna
-    import sampling
+    from common import vienna_rna
+    from common import sampling
 
 
     seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
@@ -554,7 +554,7 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
 
 
 if __name__ == "__main__":
-    import vienna
+    from d2 import reference
 
     em = energy.JaxNNModel()
     # em = energy.RandomHairpinModel()
@@ -587,7 +587,7 @@ if __name__ == "__main__":
     reference_discrete_seq_pf = energy.calculate(seq, db_str, em)
     print(f"Reference discrete seq pf: {reference_discrete_seq_pf}")
 
-    # reference_seq_pf = vienna.seq_partition(p_seq, db_str, em)
+    # reference_seq_pf = reference.seq_partition(p_seq, db_str, em)
     # print(f"Reference seq pf: {reference_discrete_seq_pf}")
 
     pdb.set_trace()

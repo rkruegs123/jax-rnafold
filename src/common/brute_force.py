@@ -1,5 +1,5 @@
-from common import RNA_ALPHA, matching_to_db
-from sampling import UniformStructureSampler
+from common.utils import RNA_ALPHA, matching_to_db
+from common.sampling import UniformStructureSampler
 
 def ss_partition(p_seq, energy_fn):
     n = p_seq.shape[0]

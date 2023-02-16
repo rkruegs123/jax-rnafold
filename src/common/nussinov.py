@@ -1,6 +1,6 @@
-from utils import ALL_PAIRS, RNA_ALPHA, NTS, HAIRPIN
+from common.utils import ALL_PAIRS, RNA_ALPHA, NTS, HAIRPIN
 import numpy as np
-import brute_force
+from common import brute_force
 
 
 def make_valid_pairs_table():
@@ -38,12 +38,12 @@ def ss_partition(p_seq, en_pair=en_pair):
     return D[0, n-1]
 
 def energy(seq, match):
-        e = 1
-        for i in range(len(match)):
-            if match[i] > i:
-                e *= en_pair(RNA_ALPHA.index(seq[i]),
-                             RNA_ALPHA.index(seq[match[i]]))
-        return e
+    e = 1
+    for i in range(len(match)):
+        if match[i] > i:
+            e *= en_pair(RNA_ALPHA.index(seq[i]),
+                         RNA_ALPHA.index(seq[match[i]]))
+    return e
 
 def main():
     n = 9
