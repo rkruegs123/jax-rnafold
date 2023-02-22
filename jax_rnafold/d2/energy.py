@@ -14,6 +14,7 @@ from jax_rnafold.common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP
 from jax_rnafold.common.utils import all_pairs_mat, non_gc_pairs_mat
 from jax_rnafold.common import utils
 from jax_rnafold.common import read_vienna_params
+from jax_rnafold.common.energy_hash import float_hash
 
 
 vienna_params = read_vienna_params.read(postprocess=False)
@@ -120,53 +121,39 @@ class All1Model(Model):
 class RandomModel(Model):
     def __init__(self, seed=1):
         self.seed = seed
-    def float_hash(self, *args):
-        base = 97
-        mod = 10007
-        p = 1
-        v = (self.seed*7777777)%mod
-        for a in args:
-            if a is None:
-                continue
-            v += p*a
-            v %= mod
-            p *= base
-            p %= mod
-        v = (v * 9999999) % mod
-        return v/(mod-1)
 
     def en_ext_branch(self, bim1, bi, bj, bjp1):
-        return self.float_hash(bim1, bi, bj, bjp1, 1)
+        return float_hash(self.seed, bim1, bi, bj, bjp1, 1)
 
     def en_multi_branch(self, bim1, bi, bk, bkp1):
-        return self.float_hash(bim1, bi, bk, bkp1, 2)
+        return float_hash(self.seed, bim1, bi, bk, bkp1, 2)
 
     def en_multi_closing(self, bi, bip1, bjm1, bj):
-        return self.float_hash(bi, bip1, bjm1, bj, 3)
+        return float_hash(self.seed, bi, bip1, bjm1, bj, 3)
 
     def en_hairpin_not_special(self, bi, bj, bip1, bjm1, nunpaired):
-        return self.float_hash(bi, bj, bip1, bjm1, nunpaired, 4)
+        return float_hash(self.seed, bi, bj, bip1, bjm1, nunpaired, 4)
 
     def en_hairpin_special(self, id):
-        return self.float_hash(id, 5)
+        return float_hash(self.seed, id, 5)
 
     def en_stack(self, bi, bj, bk, bl):
-        return self.float_hash(bi, bj, bk, bl, 6)
+        return float_hash(self.seed, bi, bj, bk, bl, 6)
 
     def en_bulge(self, bi, bj, bk, bl, nunpaired):
-        return self.float_hash(bi, bj, bk, bl, nunpaired, 7)
+        return float_hash(self.seed, bi, bj, bk, bl, nunpaired, 7)
 
     def en_il_inner_mismatch(self, bi, bj, bip1, bjm1):
-        return self.float_hash(bi, bj, bip1, bjm1, 8)
+        return float_hash(self.seed, bi, bj, bip1, bjm1, 8)
 
     def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
-        return self.float_hash(bi, bj, bim1, bjp1, 9)
+        return float_hash(self.seed, bi, bj, bim1, bjp1, 9)
 
     def en_internal_init(self, sz):
-        return self.float_hash(sz, 10)
+        return float_hash(self.seed, sz, 10)
 
     def en_internal_asym(self, lup, rup):
-        return self.float_hash(lup, rup, 11)
+        return float_hash(self.seed, lup, rup, 11)
 
 
 class RandomMultiloopModel(RandomModel):

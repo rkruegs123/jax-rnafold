@@ -160,6 +160,32 @@ class bcolors:
 
 MAX_PRECOMPUTE = 200
 
+
+def random_pseq(n):
+    p_seq = onp.empty((n, 4), dtype=onp.float64)
+    for i in range(n):
+        p_seq[i] = onp.random.random_sample(4)
+        p_seq[i] /= onp.sum(p_seq[i])
+    return p_seq
+
+def structure_tree(db):
+    n = len(db)
+    ch = {-1: []}
+    stk = [-1]
+    right = [-1]*n
+    for i in range(n):
+        if db[i] == '(':
+            stk.append(i)
+        elif db[i] == ')':
+            left = stk.pop()
+            if stk[-1] not in ch:
+                ch[stk[-1]] = []
+            ch[stk[-1]].append(left)
+            right[left] = i
+    return ch, right
+
+
+
 if __name__ == "__main__":
     from jax import vmap
     fn = lambda x: x

@@ -1,5 +1,5 @@
 import numpy as np
-from jax_rnafold.common.rna_utils import RNA_ALPHA, SPECIAL_HAIRPINS, INVALID_BASE, structure_tree
+from jax_rnafold.common.utils import RNA_ALPHA, SPECIAL_HAIRPINS, INVALID_BASE, structure_tree
 from jax_rnafold.common.energy_hash import float_hash
 
 
@@ -54,11 +54,11 @@ class Model:
     def en_internal_init(self, sz):
         pass
 
-    def en_internal_asym(self, asym):
+    def en_internal_asym(self, lup, rup):
         pass
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
-        en = self.en_internal_init(lup+rup)*self.en_internal_asym(abs(lup - rup))*self.en_il_inner_mismatch(
+        en = self.en_internal_init(lup+rup)*self.en_internal_asym(lup, rup)*self.en_il_inner_mismatch(
             bi, bj, bip1, bjm1)*self.en_il_outer_mismatch(bk, bl, bkm1, blp1)
         return en
 
@@ -112,7 +112,7 @@ class All0Model(Model):
     def en_internal_init(self, sz):
         return 0
 
-    def en_internal_asym(self, asym):
+    def en_internal_asym(self, lup, rup):
         return 0
 
 
@@ -165,7 +165,7 @@ class All1Model(Model):
     def en_internal_init(self, sz):
         return 1
 
-    def en_internal_asym(self, asym):
+    def en_internal_asym(self, lup, rup):
         return 1
 
 
@@ -224,8 +224,8 @@ class RandomModel(Model):
     def en_internal_init(self, sz):
         return self.hash(sz, 16)
 
-    def en_internal_asym(self, asym):
-        return self.hash(asym, 17)
+    def en_internal_asym(self, lup, rup):
+        return self.hash(lup, rup, 17)
 
 def dangle_dp(seq, branches, em: Model, closing_pair=None):
     n = len(branches)

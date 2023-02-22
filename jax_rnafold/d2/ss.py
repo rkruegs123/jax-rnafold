@@ -20,7 +20,7 @@ from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
 from jax_rnafold.common import nussinov as nus
-from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot
+from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq
 
 from jax_rnafold.d2 import energy
 from jax_rnafold.d2 import dp_discrete
@@ -493,25 +493,19 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
 
 class TestPartitionFunction(unittest.TestCase):
-    def _random_p_seq(self, n):
-        p_seq = onp.empty((n, 4), dtype=onp.float64)
-        for i in range(n):
-            p_seq[i] = onp.random.random_sample(4)
-            p_seq[i] /= onp.sum(p_seq[i])
-        return p_seq
 
     def _all_1_test(self, n):
         em = energy.All1Model()
         ss_partition_fn = get_ss_partition_fn(em)
 
-        p_seq = self._random_p_seq(n)
+        p_seq = random_pseq(n)
         nuss = nus.ss_partition(p_seq, en_pair=nus.en_pair_1)
         vien = ss_partition_fn(p_seq)
         print(n, nuss, vien)
         self.assertAlmostEqual(nuss, vien, places=7)
 
     def _brute_model_test(self, em, n):
-        p_seq = self._random_p_seq(n)
+        p_seq = random_pseq(n)
         ss_partition_fn = get_ss_partition_fn(em)
         vien = ss_partition_fn(p_seq)
         brute = brute_force.ss_partition(p_seq, energy_fn=lambda seq, match: energy.calculate(
@@ -519,8 +513,8 @@ class TestPartitionFunction(unittest.TestCase):
         print(n, brute, vien)
         self.assertAlmostEqual(brute, vien, places=7)
 
-    def _max_ss_test(self, em, n):
-        p_seq = self._random_p_seq(n)
+    def _reference_ss_test(self, em, n):
+        p_seq = random_pseq(n)
         ss_partition_fn = get_ss_partition_fn(em, n)
         vien = ss_partition_fn(p_seq)
         max = reference.ss_partition(p_seq, em)
@@ -535,7 +529,7 @@ class TestPartitionFunction(unittest.TestCase):
         # em = energy.RandomHairpinModel()
 
         self._brute_model_test(em, n)
-        # self._max_ss_test(em, n)
+        # self._reference_ss_test(em, n)
 
 
     def _test_all_1_model_to_10(self):
