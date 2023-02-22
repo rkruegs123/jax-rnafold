@@ -1,6 +1,6 @@
-from common.utils import ALL_PAIRS, RNA_ALPHA, NTS, HAIRPIN
+from jax_rnafold.common.utils import ALL_PAIRS, RNA_ALPHA, NTS, HAIRPIN
 import numpy as np
-from common import brute_force
+from jax_rnafold.common import brute_force
 
 
 def make_valid_pairs_table():

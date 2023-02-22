@@ -1,4 +1,4 @@
-from common.utils import valid_pair, HAIRPIN
+from jax_rnafold.common.utils import valid_pair, HAIRPIN
 
 # Runs an O(n^3) precomp algorithm after which all structures are given an arbitrary unique ID.
 # The structure for an ID can be retrieved in O(n^2) time.

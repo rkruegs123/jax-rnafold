@@ -1,9 +1,11 @@
 import unittest
-from common.utils import ALL_PAIRS, RNA_ALPHA, NTS, NBPS, HAIRPIN, SPECIAL_HAIRPINS, INVALID_BASE
-from d2 import energy
 import numpy as np
-from common import utils
-from common import brute_force
+
+from jax_rnafold.common.utils import ALL_PAIRS, RNA_ALPHA, NTS, NBPS, HAIRPIN, SPECIAL_HAIRPINS, INVALID_BASE
+from jax_rnafold.common import utils
+from jax_rnafold.common import brute_force
+from jax_rnafold.d2 import energy
+
 
 
 def get_bp_bases(bp):

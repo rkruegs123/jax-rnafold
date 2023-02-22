@@ -1,5 +1,5 @@
-from common.utils import RNA_ALPHA, matching_to_db
-from common.sampling import UniformStructureSampler
+from jax_rnafold.common.utils import RNA_ALPHA, matching_to_db
+from jax_rnafold.common.sampling import UniformStructureSampler
 
 def ss_partition(p_seq, energy_fn):
     n = p_seq.shape[0]

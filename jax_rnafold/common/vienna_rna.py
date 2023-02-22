@@ -2,7 +2,7 @@ import pdb
 import numpy as np
 import RNA
 
-from common.utils import R, CELL_TEMP, boltz_onp
+from jax_rnafold.common.utils import R, CELL_TEMP, boltz_onp
 
 
 # https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/examples_python.html

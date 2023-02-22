@@ -1,6 +1,6 @@
 import numpy as np
-from common.rna_utils import RNA_ALPHA, SPECIAL_HAIRPINS, INVALID_BASE, structure_tree
-from common.energy_hash import float_hash
+from jax_rnafold.common.rna_utils import RNA_ALPHA, SPECIAL_HAIRPINS, INVALID_BASE, structure_tree
+from jax_rnafold.common.energy_hash import float_hash
 
 
 class Model:

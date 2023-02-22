@@ -12,17 +12,16 @@ import jax.numpy as jnp
 from jax.config import config
 config.update("jax_enable_x64", True)
 
-from d1 import energy
-from common.checkpoint import checkpoint_scan
-from common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE
-from common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
+from jax_rnafold.d1 import energy
+from jax_rnafold.common.checkpoint import checkpoint_scan
+from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE
+from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
-from common.utils import matching_to_db
-from common.utils import MAX_PRECOMPUTE, MAX_LOOP
-from common import brute_force
-from common import nussinov as nus
-
-from common.utils import get_rand_seq, seq_to_one_hot
+from jax_rnafold.common.utils import matching_to_db
+from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
+from jax_rnafold.common import brute_force
+from jax_rnafold.common import nussinov as nus
+from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot
 
 
 

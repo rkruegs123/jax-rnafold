@@ -6,9 +6,9 @@ from copy import deepcopy
 
 import jax.numpy as jnp
 
-from common.utils import NON_GC_PAIRS, RNA_ALPHA, RNA_ALPHA_IDX
-from common.utils import CELL_TEMP, MAX_LOOP
-from common.utils import all_pairs_mat, MAX_PRECOMPUTE
+from jax_rnafold.common.utils import NON_GC_PAIRS, RNA_ALPHA, RNA_ALPHA_IDX
+from jax_rnafold.common.utils import CELL_TEMP, MAX_LOOP
+from jax_rnafold.common.utils import all_pairs_mat, MAX_PRECOMPUTE
 
 from jax.config import config
 config.update("jax_enable_x64", True)
@@ -369,7 +369,7 @@ def postprocess_data(data, max_precompute):
     return postprocessed_data
 
 
-def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True):
+def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True, log=False):
     with open(param_path, 'r') as f:
         # param_text = f.read()
         param_lines = f.readlines()
@@ -486,7 +486,8 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
                 special_hairpin_map[seq] = float(dg) / 100
             data[chunk_name] = special_hairpin_map
         else:
-            print(f"WARNING: unprocessed chunk name: {chunk_name}")
+            if log:
+                print(f"WARNING: unprocessed chunk name: {chunk_name}")
 
 
     if postprocess:

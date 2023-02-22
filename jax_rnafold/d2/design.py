@@ -15,21 +15,22 @@ import jax.numpy as jnp
 from jax.config import config
 config.update("jax_enable_x64", True)
 
-from d2 import energy
-from common.checkpoint import checkpoint_scan
-from common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
-from common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
+from jax_rnafold.common.checkpoint import checkpoint_scan
+from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
+from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
-from common.utils import matching_to_db
-from common.utils import MAX_PRECOMPUTE
-from common import brute_force
-import common.nussinov as nus
+from jax_rnafold.common.utils import matching_to_db
+from jax_rnafold.common.utils import MAX_PRECOMPUTE
+from jax_rnafold.common import brute_force
+import jax_rnafold.common.nussinov as nus
+from jax_rnafold.common import vienna_rna
+from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot
 
-from d2 import dp_discrete
-from common.utils import get_rand_seq, seq_to_one_hot
-from d2.ss import get_ss_partition_fn
-from d2.seq_pf import get_seq_partition_fn
-from common import vienna_rna
+from jax_rnafold.d2 import dp_discrete
+from jax_rnafold.d2 import energy
+from jax_rnafold.d2.ss import get_ss_partition_fn
+from jax_rnafold.d2.seq_pf import get_seq_partition_fn
+
 
 
 def design_seq_for_struct(db_str,

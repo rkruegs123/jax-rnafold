@@ -1,4 +1,4 @@
-from common import nussinov, read_vienna_params
+from jax_rnafold.common import nussinov, read_vienna_params
 
 if __name__ == "__main__":
     params_dir = "misc"
