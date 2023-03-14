@@ -505,7 +505,7 @@ class JaxNNModel(Model):
 
         initiation = jax_vienna_params['hairpin'][nunpaired] # Note: nunpaired must be less than MAX_PRECOMPUTE
 
-        # only uesd if u != 3
+        # only used if u != 3
         mismatch = jax_vienna_params['mismatch_hairpin'][bi, bj, bip1, bjm1]
 
         # only used if u == 3
@@ -610,7 +610,6 @@ class JaxNNModel(Model):
         return all_pairs_mat[bi, bk] * boltz_jnp(dg)
 
 
-    # FIXME: correct these! i.e. change them all throughout to take lup and rup!
     # Helper that returns the energy rather than the boltzmann weight
     def _en_internal_asym(self, lup, rup):
         return jax_vienna_params['asymmetry_matrix'][lup, rup]

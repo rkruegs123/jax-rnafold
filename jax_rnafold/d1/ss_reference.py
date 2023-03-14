@@ -135,7 +135,7 @@ def ss_partition(p_seq, em: energy.Model, dtype=np.float64):
                     else:
                         # Optimised using the mismatch trick (mmij*OMM)
                         init_and_pair = em.en_internal_init(
-                            lup+rup)*em.en_internal_asym(abs(lup-rup))*P[bk, bl, k, l]*p_seq[k, bk]*p_seq[l, bl]
+                            lup+rup)*em.en_internal_asym(lup, rup)*P[bk, bl, k, l]*p_seq[k, bk]*p_seq[l, bl]
                         sm += OMM[bk, bl, k, l]*mmij*init_and_pair
         return sm
 

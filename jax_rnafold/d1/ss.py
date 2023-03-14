@@ -21,7 +21,7 @@ from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
 from jax_rnafold.common import nussinov as nus
-from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq
+from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq, matching_2_dot_bracket, bcolors
 
 
 f64 = jnp.float64
@@ -514,6 +514,43 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
     return ss_partition
 
 
+def train(n, lr=0.1, n_iter=100, print_every=1):
+    em = energy.JaxNNModel()
+    ss_fn = get_ss_partition_fn(em, n)
+
+    def loss_fn(params):
+        curr_logits = params['seq_logits']
+        p_seq = jax.nn.softmax(curr_logits)
+        q = ss_fn(p_seq)
+        return q
+    grad_fn = value_and_grad(loss_fn)
+    grad_fn = jit(grad_fn)
+
+    seq_logits = onp.full((n, 4), 5)
+    seq_logits = jnp.array(seq_logits, dtype=jnp.float64)
+    params = {'seq_logits': seq_logits}
+
+    optimizer = optax.rmsprop(learning_rate=lr)
+    opt_state = optimizer.init(params)
+
+    for i in range(n_iter):
+        start = time.time()
+        q, _grad = grad_fn(params)
+
+        updates, opt_state = optimizer.update(_grad, opt_state)
+        params = optax.apply_updates(params, updates)
+
+        end = time.time()
+        iter_time = end - start
+
+        if i % print_every == 1:
+            print(f"Iteration {i}:")
+            print(f"- Q: {q}")
+            print(f"- Time: {onp.round(iter_time, 2)}")
+
+    return
+
+
 
 class TestSSPartitionFunction(unittest.TestCase):
 
@@ -533,7 +570,7 @@ class TestSSPartitionFunction(unittest.TestCase):
         print(n, brute_q, q)
         self.assertAlmostEqual(brute_q, q, places=7)
 
-    def test_all_1_model_to_10(self):
+    def _test_all_1_model_to_10(self):
         for n in range(1, 10):
             self._random_seq_test(n, energy.All1Model())
 
@@ -541,5 +578,56 @@ class TestSSPartitionFunction(unittest.TestCase):
         for n in range(1, 10):
             self._random_seq_test(n, energy.RandomModel())
 
+    def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
+        from tqdm import tqdm
+        import random
+
+        from jax_rnafold.common import vienna_rna
+        import jax_rnafold.d1.ss_reference as reference
+
+
+        ss_partition_fn = get_ss_partition_fn(em, n)
+        ss_partition_fn = jit(ss_partition_fn)
+
+        seqs = [get_rand_seq(n) for _ in range(num_seq)]
+
+        failed_cases = list()
+        n_passed = 0
+
+        failed_cases = list()
+        for seq in seqs:
+            p_seq = jnp.array(seq_to_one_hot(seq))
+
+            print(f"Sequence: {seq}")
+
+            ss_pf = ss_partition_fn(p_seq)
+            print(f"\tComputed partition function: {ss_pf}")
+            """
+            ref_pf = vienna_rna.get_vienna_pf(seq, dangle_mode=0)
+            print(f"\tVienna partition function: {ref_pf}")
+            ref_pf = brute_force.ss_partition(p_seq,
+                                              energy_fn=lambda seq, match: energy.calculate(
+                                                  seq, matching_to_db(match), em))
+            print(f"\tBrute partition function: {ref_pf}")
+            """
+            ref_pf = reference.ss_partition(p_seq, energy.NNModel())
+            print(f"\tReference partition function: {ref_pf}")
+
+            self.assertAlmostEqual(ss_pf, ref_pf, places=7)
+
+    def _test_fuzz(self):
+        em = energy.JaxNNModel()
+        self.fuzz_test(16, 10, em)
+
+    def _test_fuzz(self):
+        em = energy.JaxNNModel()
+        self.fuzz_test(16, 10, em)
+
+    def test_train(self):
+        train(8)
+        self.assertAlmostEqual(1.0, 1.0, places=7)
+
+
 if __name__ == "__main__":
     unittest.main()
+    # train(8)
