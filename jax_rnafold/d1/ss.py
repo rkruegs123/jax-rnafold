@@ -3,6 +3,7 @@ import pdb
 import functools
 import unittest
 import time
+from tqdm import tqdm
 
 import jax
 import optax
@@ -514,7 +515,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
     return ss_partition
 
 
-def train(n, lr=0.1, n_iter=100, print_every=1):
+def train(n, lr=0.1, n_iter=10, print_every=1):
     em = energy.JaxNNModel()
     ss_fn = get_ss_partition_fn(em, n)
 
@@ -533,7 +534,7 @@ def train(n, lr=0.1, n_iter=100, print_every=1):
     optimizer = optax.rmsprop(learning_rate=lr)
     opt_state = optimizer.init(params)
 
-    for i in range(n_iter):
+    for i in tqdm(range(n_iter)):
         start = time.time()
         q, _grad = grad_fn(params)
 
@@ -543,12 +544,12 @@ def train(n, lr=0.1, n_iter=100, print_every=1):
         end = time.time()
         iter_time = end - start
 
-        if i % print_every == 1:
+        if i % print_every == 0:
             print(f"Iteration {i}:")
             print(f"- Q: {q}")
             print(f"- Time: {onp.round(iter_time, 2)}")
 
-    return
+    return q
 
 
 
@@ -579,7 +580,6 @@ class TestSSPartitionFunction(unittest.TestCase):
             self._random_seq_test(n, energy.RandomModel())
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
-        from tqdm import tqdm
         import random
 
         from jax_rnafold.common import vienna_rna
@@ -624,8 +624,8 @@ class TestSSPartitionFunction(unittest.TestCase):
         self.fuzz_test(16, 10, em)
 
     def test_train(self):
-        train(8)
-        self.assertAlmostEqual(1.0, 1.0, places=7)
+        hi = train(n=8)
+        self.assertAlmostEqual(1.0, hi, places=7)
 
 
 if __name__ == "__main__":
