@@ -624,7 +624,7 @@ class TestSSPartitionFunction(unittest.TestCase):
         self.fuzz_test(16, 10, em)
 
     def test_train(self):
-        hi = train(n=8)
+        hi = train(n=64)
         self.assertAlmostEqual(1.0, hi, places=7)
 
 

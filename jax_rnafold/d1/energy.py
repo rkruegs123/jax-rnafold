@@ -1,4 +1,6 @@
 import numpy as onp
+import unittest
+import pdb
 
 import jax.numpy as jnp
 
@@ -8,6 +10,7 @@ from jax_rnafold.common.utils import structure_tree
 from jax_rnafold.common.energy_hash import float_hash
 from jax_rnafold.common.utils import boltz_onp, boltz_jnp
 from jax_rnafold.common.utils import non_gc_pairs_mat, all_pairs_mat
+from jax_rnafold.common.utils import kb, CELL_TEMP
 from jax_rnafold.common import read_vienna_params
 
 vienna_params = read_vienna_params.read(postprocess=False)
@@ -556,11 +559,13 @@ class JaxNNModel(Model):
         bulge_dg += jnp.where(nunpaired == 1, stack_dg, gc_penalty_dg)
         return boltz_jnp(bulge_dg)
 
-    def en_il_inner_mismatch(self, bi, bj, bip1, bjm1):
-        return boltz_jnp(jax_vienna_params['mismatch_interior'][bi, bj, bip1, bjm1])
+    def en_il_inner_mismatch(self, bi, bj, bip1, bjm1,
+                             mm_table=jax_vienna_params['mismatch_interior']):
+        return boltz_jnp(mm_table[bi, bj, bip1, bjm1])
 
-    def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
-        return boltz_jnp(jax_vienna_params['mismatch_interior'][bj, bi, bjp1, bim1])
+    def en_il_outer_mismatch(self, bi, bj, bim1, bjp1,
+                             mm_table=jax_vienna_params['mismatch_interior']):
+        return boltz_jnp(mm_table[bj, bi, bjp1, bim1])
 
     def _en_internal_init(self, sz):
         return jax_vienna_params['interior'][sz] # Note: sz must be less than MAX_PRECOMPUTE
@@ -573,9 +578,27 @@ class JaxNNModel(Model):
         return boltz_jnp(self._en_internal_asym(lup, rup))
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
-        en = self.en_internal_init(lup+rup)*self.en_internal_asym(lup, rup)*self.en_il_inner_mismatch(
-            bi, bj, bip1, bjm1)*self.en_il_outer_mismatch(bk, bl, bkm1, blp1)
-        return en
+        mm_table = jnp.where((lup == 1) | (rup == 1),
+                             jax_vienna_params['mismatch_interior_1n'],
+                             jnp.where(((lup == 2) & (rup == 3)) | ((lup == 3) & (rup == 2)),
+                                       jax_vienna_params['mismatch_interior_23'],
+                                       jax_vienna_params['mismatch_interior']))
+
+        gen_int = self.en_internal_init(lup+rup) * self.en_internal_asym(lup, rup) \
+                  * self.en_il_inner_mismatch(bi, bj, bip1, bjm1, mm_table) \
+                  * self.en_il_outer_mismatch(bk, bl, bkm1, blp1, mm_table)
+
+        dg_boltz = jnp.where((lup == 1) & (rup == 1),
+                       boltz_jnp(jax_vienna_params['int11'][bi, bj, bl, bk, bip1, bjm1]),
+                       jnp.where((lup == 1) & (rup == 2),
+                                 boltz_jnp(jax_vienna_params['int21'][bi, bj, bl, bk, bip1, blp1, bjm1]),
+                                 jnp.where((lup == 2) & (rup == 1),
+                                           boltz_jnp(jax_vienna_params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1]),
+                                           jnp.where((lup == 2) & (rup == 2),
+                                                     boltz_jnp(jax_vienna_params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1]),
+                                                     gen_int))))
+
+        return dg_boltz
 
 
 
@@ -680,3 +703,208 @@ def calculate(str_seq, db, em: Model):
                 sm *= calc_rec(cl)*em.en_multi_branch(seq[cl], seq[right[cl]])
             return sm*dangle_dp(seq, branches, em, (atl, right[atl]))
     return calc_rec(-1)
+
+
+beta = 1 / (kb*CELL_TEMP)
+def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
+    n = len(branches)
+    if n == 0:
+        if closing_pair is None:
+            return 1
+        i, j = closing_pair
+        en = 1
+        dg = 0.0
+        if i+1 < j:
+            dangle3_inner_boltz = em.en_3dangle_inner(seq[i], seq[i+1], seq[j])
+            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/beta)
+            if dangle3_inner_dg < dg:
+                dg = dangle3_inner_dg
+                en = dangle3_inner_boltz
+
+            dangle5_inner_boltz = em.en_5dangle_inner(seq[i], seq[j-1], seq[j])
+            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/beta)
+            if dangle5_inner_dg < dg:
+                dg = dangle5_inner_dg
+                en = dangle5_inner_boltz
+
+            if i+1 < j-1:
+                term_mismatch_inner_boltz = em.en_term_mismatch_inner(seq[i], seq[i+1], seq[j-1], seq[j])
+                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/beta)
+                if term_mismatch_inner_dg < dg:
+                    dg = term_mismatch_inner_dg
+                    en = term_mismatch_inner_boltz
+        return en
+    branches = branches + \
+        [(len(seq) if closing_pair is None else closing_pair[1], 0)]
+    dp = onp.zeros((2, 2, n+1))
+    dp[:, :, n] = 1
+    for b in range(n-1, -1, -1):
+        for last in range(2):
+            for curr in range(2):
+                i, j = branches[b]
+                nexti = branches[b+1][0]
+                dp[last, curr, b] = dp[last, int(nexti > j+1), b+1]
+                current_dg = onp.log(dp[last, curr, b]) * (-1/beta)
+                if curr == 1:
+                    dangle5_boltz = dp[last, int(nexti > j+1), b+1] \
+                                    * em.en_5dangle(seq[i-1], seq[i], seq[j])
+                    dangle5_dg = onp.log(dangle5_boltz) * (-1/beta)
+                    if dangle5_dg < current_dg:
+                        dp[last, curr, b] = dangle5_boltz
+                        current_dg = dangle5_dg
+
+                if b < n-1 or last:
+                    if j+1 >= len(seq):
+                        continue
+                    if b < n-1 and nexti == j+1:
+                        continue
+
+                    dangle3_boltz = dp[last, int(nexti > j+2), b+1] \
+                                    * em.en_3dangle(seq[i], seq[j], seq[j+1])
+                    dangle3_dg = onp.log(dangle3_boltz) * (-1/beta)
+                    if dangle3_dg < current_dg:
+                        dp[last, curr, b] = dangle3_boltz
+                        current_dg = dangle3_dg
+                    if curr == 1:
+                        term_mismatch_boltz = dp[last, int(nexti > j+2), b+1] \
+                                              * em.en_term_mismatch(seq[i-1], seq[i],
+                                                                    seq[j], seq[j+1])
+                        term_mismatch_dg = onp.log(term_mismatch_boltz) * (-1/beta)
+                        if term_mismatch_dg < current_dg:
+                            dp[last, curr, b] = term_mismatch_boltz
+                            current_dg = term_mismatch_dg
+
+    if closing_pair is None:
+        return dp[int(branches[-2][1]+1 < len(seq)), int(branches[0][0] > 0), 0]
+    else:
+        i, j = closing_pair
+        fi, fj = branches[0]
+        li, lj = branches[-2]
+        sm = dp[int(lj < j-1), int(i+1 < fi), 0]
+        current_dg = onp.log(sm) * (-1/beta)
+        if i+1 < fi:
+            dangle3_inner_boltz = dp[int(lj < j-1), int(i+2 < fi), 0] * \
+                                  em.en_3dangle_inner(seq[i], seq[i+1], seq[j])
+            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/beta)
+            if dangle3_inner_dg < current_dg:
+                sm = dangle3_inner_boltz
+                current_dg = dangle3_inner_dg
+        if lj < j-1:
+            dangle5_inner_boltz = dp[int(lj < j-2), int(i+1 < fi), 0] * \
+                                  em.en_5dangle_inner(seq[i], seq[j-1], seq[j])
+            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/beta)
+            if dangle5_inner_dg < current_dg:
+                sm = dangle5_inner_boltz
+                current_dg = dangle5_inner_dg
+
+            if i+1 < fi:
+                term_mismatch_inner_boltz = dp[int(lj < j-2), int(i+2 < fi), 0] * \
+                                            em.en_term_mismatch_inner(
+                                                seq[i], seq[i+1], seq[j-1], seq[j])
+                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/beta)
+                if term_mismatch_inner_dg < current_dg:
+                    sm = term_mismatch_inner_boltz
+                    current_dg = term_mismatch_inner_dg
+        return sm
+
+
+
+def calculate_min(str_seq, db, em: Model):
+    seq = [RNA_ALPHA.index(c) for c in str_seq]
+
+    ch, right = structure_tree(db)
+
+    def calc_rec(atl):
+        if atl == -1:
+            sm = 1
+            branches = []
+            for cl in ch[atl]:
+                ext_branch_val = em.en_ext_branch(seq[cl], seq[right[cl]])
+                # print(f"External: {onp.log(ext_branch_val) * (-1/beta)}")
+                sm *= calc_rec(cl)*ext_branch_val
+                branches.append((cl, right[cl]))
+            dp_val = dangle_dp_min(seq, branches, em)
+            dp_dg = onp.log(dp_val) * (-1/beta)
+            # print(f"External dp: {dp_dg}")
+            return sm*dp_val
+        if atl not in ch:
+            s = str_seq[atl:right[atl]+1]
+            idx = SPECIAL_HAIRPINS.index(s) if s in SPECIAL_HAIRPINS else -1
+            hairpin_val = em.en_hairpin_special(idx) if idx != -1 else em.en_hairpin_not_special(
+                seq[atl], seq[right[atl]], seq[atl+1], seq[right[atl]-1], right[atl]-atl-1)
+            # print(atl)
+            # print(right[atl])
+            # print(onp.log(hairpin_val) * (-1/beta))
+            return hairpin_val
+        elif len(ch[atl]) == 1:
+            cl, cr = ch[atl][0], right[ch[atl][0]]
+            if cl == atl+1 and cr == right[atl]-1:
+                return em.en_stack(seq[atl], seq[right[atl]], seq[cl], seq[cr])*calc_rec(cl)
+            elif cl == atl+1 or cr == right[atl]-1:
+                nunpaired = max(cl-atl-1, right[atl]-cr-1)
+                return em.en_bulge(seq[atl], seq[right[atl]], seq[cl], seq[cr], nunpaired)*calc_rec(cl)
+            else:
+                bi = seq[atl]
+                bj = seq[right[atl]]
+                bip1 = seq[atl+1]
+                bjm1 = seq[right[atl]-1]
+                bk = seq[cl]
+                bl = seq[cr]
+                bkm1 = seq[cl-1]
+                blp1 = seq[cr+1]
+                lup = cl-atl-1
+                rup = right[atl]-cr-1
+                internal_val = em.en_internal(bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup)
+                # print(f"Internal: {onp.log(internal_val) * (-1/beta)}")
+                return internal_val*calc_rec(cl)
+        else:
+            sm = em.en_multi_closing(seq[atl], seq[right[atl]])
+            branches = []
+            for cl in ch[atl]:
+                branches.append((cl, right[cl]))
+                sm *= calc_rec(cl)*em.en_multi_branch(seq[cl], seq[right[cl]])
+            return sm*dangle_dp_min(seq, branches, em, (atl, right[atl]))
+    fin_sm = calc_rec(-1)
+    return fin_sm
+
+class TestEnergyCalculator(unittest.TestCase):
+
+    def test_vienna(self):
+        from jax_rnafold.common.utils import dot_bracket_2_matching, matching_2_dot_bracket
+        from jax_rnafold.common.utils import seq_to_one_hot, get_rand_seq, random_pseq
+        from jax_rnafold.common import vienna_rna, sampling
+        import random
+        from tqdm import tqdm
+
+        n = 40
+        max_structs = 50
+
+        em = JaxNNModel()
+        # seq = get_rand_seq(n)
+        seq = "UCUGUCGACGGAGGGUUUAU"
+        p_seq = jnp.array(seq_to_one_hot(seq))
+        print(f"Sequence: {seq}")
+
+        sampler = sampling.UniformStructureSampler()
+        sampler.precomp(seq)
+        n_structs = sampler.count_structures()
+        if n_structs > max_structs:
+            all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
+        else:
+            all_structs = [sampler.get_nth(i) for i in range(n_structs)]
+        all_structs = [matching_2_dot_bracket(matching) for matching in all_structs]
+        # all_structs = [".(.(....).)(...)...."]
+
+        for db_str in tqdm(all_structs):
+            print(f"\tStructure: {db_str}")
+
+            matching = dot_bracket_2_matching(db_str)
+            calc_boltz = calculate_min(seq, db_str, em)
+            calc_dg = onp.log(calc_boltz) * (-1/beta)
+
+            vienna_dg = vienna_rna.vienna_energy(seq, db_str, dangle_mode=1)
+            print(f"\t\tCalculated dG: {calc_dg}")
+            print(f"\t\tVienna dG: {vienna_dg}")
+
+            # self.assertAlmostEqual(calc_dg, vienna_dg, places=7)
+            self.assertAlmostEqual(calc_dg, vienna_dg, places=5)

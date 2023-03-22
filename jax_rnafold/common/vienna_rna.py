@@ -6,8 +6,10 @@ from jax_rnafold.common.utils import R, CELL_TEMP, boltz_onp
 
 
 # https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/examples_python.html
-def vienna_energy(seq, struct):
-    fc = RNA.fold_compound(seq)
+def vienna_energy(seq, struct, dangle_mode=2):
+    md = RNA.md()
+    md.dangles = dangle_mode
+    fc = RNA.fold_compound(seq, md)
 
     (mfe_struct, mfe) = fc.mfe()
     fc.exp_params_rescale(mfe)
@@ -23,7 +25,7 @@ def get_vienna_pf(seq, dangle_mode=2):
     md = RNA.md();
     md.uniq_ML = 1
     md.dangles = dangle_mode
-    md.noLP = False
+    md.noLP = False # lonely pairs
     fc = RNA.fold_compound(seq, md)
 
     # compute MFE and MFE structure
