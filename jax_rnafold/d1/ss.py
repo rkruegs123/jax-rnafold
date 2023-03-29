@@ -38,30 +38,6 @@ else:
 
 
 
-def fill_external_help(em, i, padded_p_seq, P, E):
-    from jax_rnafold.common.utils import NTS
-
-    n = padded_p_seq.shape[0] - 2
-    sm = E[i+1]
-    for j in range(i+1, n+1):
-        for bi in range(NTS):
-            for bj in range(NTS):
-                base_en = E[j+1]*padded_p_seq[i, bi]*padded_p_seq[j, bj]
-                sm += base_en*P[bi, bj, i, j]*em.en_ext_branch(bi, bj)
-                for bip1 in range(NTS):
-                    sm += base_en*P[bip1, bj, i+1, j]*em.en_ext_branch(
-                        bip1, bj)*padded_p_seq[i+1, bip1]*em.en_5dangle(bi, bip1, bj)
-                for bjm1 in range(NTS):
-                    sm += base_en*P[bi, bjm1, i, j-1]*em.en_ext_branch(
-                        bi, bjm1)*padded_p_seq[j-1, bjm1]*em.en_3dangle(bi, bjm1, bj)
-                for bip1 in range(NTS):
-                    for bjm1 in range(NTS):
-                        sm += base_en*P[bip1, bjm1, i+1, j-1]*em.en_ext_branch(
-                            bip1, bjm1)*padded_p_seq[j-1, bjm1]*padded_p_seq[i+1, bip1]*em.en_term_mismatch(bi, bip1, bjm1, bj)
-    return sm
-
-
-
 def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
     two_loop_length = min(seq_len, max_loop)
 
@@ -277,12 +253,9 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
     @jit
     def psum_hairpin(bi, bj, i, j, padded_p_seq):
-        """
         return psum_hairpin_not_special(bi, bj, i, j, padded_p_seq) \
             + psum_hairpin_special(bi, bj, i, j, padded_p_seq) \
             - psum_hairpin_special_correction(bi, bj, i, j, padded_p_seq)
-        """
-        return psum_hairpin_not_special(bi, bj, i, j, padded_p_seq)
 
     @jit
     def psum_bulges(bi, bj, i, j, padded_p_seq, P):

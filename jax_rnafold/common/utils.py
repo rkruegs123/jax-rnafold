@@ -61,6 +61,7 @@ def get_bp_bases(bp):
 bp_bases = jnp.array([get_bp_bases(i) for i in range(NBPS)])
 
 N4 = jnp.arange(4)
+N6 = jnp.arange(NBPS)
 
 
 def matching_to_db(match):
