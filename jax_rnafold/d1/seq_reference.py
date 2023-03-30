@@ -163,8 +163,8 @@ def seq_partition(p_seq, db, em: energy.Model, dtype=np.float64):
     if len(external_c) > 0:
         boltz = kdp[int(right[external_c[-1]]+1 < n),
                     int(external_c[0] > 0), 0]
-    # return boltz, kdp, dp
     return boltz
+    # return boltz, kdp, dp
 
 
 class TestSeqPartitionFunction(unittest.TestCase):

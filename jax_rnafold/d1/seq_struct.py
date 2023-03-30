@@ -312,10 +312,10 @@ def get_seq_struct_partition_fn(em, db):
                 base = base * p_seq[k, bk] * p_seq[l, bl] * dp[bp_idx, left[st+b]]
 
                 bit = jnp.where(nexti > l+1, 1, 0)
-                sm = kdp[last, bit, b+1] * base
+                sm = curr_kdp[last, bit, b+1] * base
 
                 def dangle5_fn(bkm1):
-                    return kdp[last, bit, b+1] * em.en_5dangle(
+                    return curr_kdp[last, bit, b+1] * em.en_5dangle(
                         bkm1, bk, bl) * p_seq[k-1, bkm1] * base
                 sm += jnp.where(curr == 1,
                                 jnp.sum(vmap(dangle5_fn)(N4)),
@@ -327,11 +327,11 @@ def get_seq_struct_partition_fn(em, db):
                 count_dangle3_term_mismatch = (cond1 & ~(cond2 | cond3))
                 def dangle3_term_mismatch_fn(blp1):
                     bit2 = jnp.where(nexti > l+2, 1, 0)
-                    dangle3_sm = kdp[last, bit2, b+1]*em.en_3dangle(
+                    dangle3_sm = curr_kdp[last, bit2, b+1]*em.en_3dangle(
                         bk, bl, blp1)*p_seq[l+1, blp1]*base
 
                     def term_mismatch_fn(bkm1):
-                        return kdp[last, bit2, b+1] \
+                        return curr_kdp[last, bit2, b+1] \
                             * em.en_term_mismatch(bkm1, bk, bl, blp1) \
                             * p_seq[k-1, bkm1] * p_seq[l+1, blp1] * base
 
@@ -463,33 +463,66 @@ def get_seq_struct_partition_fn(em, db):
 
 
 class TestSeqPartitionFunction(unittest.TestCase):
+
+
+    def _test_dummy_ryan(self):
+        em = energy.JaxNNModel()
+        db = '.(....).(...)'
+
+        n = len(db)
+        seq = "UAAUGAUUGUGCC"
+        p_seq = jnp.array(seq_to_one_hot(seq))
+
+        seq_fn = get_seq_struct_partition_fn(em, db)
+        boltz_calc, fin_kdp, fin_dp = seq_fn(p_seq)
+
+        self.assertAlmostEqual(1.0, 1.0, places=10)
+
+    def _test_dummy_max(self):
+        em = energy.JaxNNModel()
+        db = '.(....).(...)'
+
+        n = len(db)
+        seq = "UAAUGAUUGUGCC"
+        p_seq = jnp.array(seq_to_one_hot(seq))
+
+        from jax_rnafold.d1.seq_reference import seq_partition
+        other_boltz_ref, ref_kdp, ref_dp = seq_partition(p_seq, db, em)
+        print(f"Max's reference boltz: {other_boltz_ref}")
+
+
+        self.assertAlmostEqual(1.0, 1.0, places=10)
+
     def _test_dummy(self):
         em = energy.JaxNNModel()
         # db = '.(....).'
-        db = '.(.(...).)'
+        db = '.(....).(...)'
         seq_fn = get_seq_struct_partition_fn(em, db)
 
         n = len(db)
-        seq = "AGUGGUUUCC"
+        # seq = "AGUGGUUUCC"
+        seq = "UAAUGAUUGUGCC"
         p_seq = jnp.array(seq_to_one_hot(seq))
         # p_seq = random_pseq(n)
         # p_seq = jnp.array(p_seq)
 
-        boltz_calc = seq_fn(p_seq)
+        # boltz_calc = seq_fn(p_seq)
+        boltz_calc, fin_kdp, fin_dp = seq_fn(p_seq)
         print(f"Our Seq PF: {boltz_calc}")
 
         boltz_ref = energy.calculate(seq, db, em)
         print(f"Energy calculator boltz: {boltz_ref}")
 
         from jax_rnafold.d1.seq_reference import seq_partition
-        other_boltz_ref = seq_partition(p_seq, db, em)
+        # other_boltz_ref = seq_partition(p_seq, db, em)
+        other_boltz_ref, ref_kdp, ref_dp = seq_partition(p_seq, db, em)
         print(f"Max's reference boltz: {other_boltz_ref}")
 
-        self.assertAlmostEqual(1.0, 1.0, places=7)
+        self.assertAlmostEqual(boltz_calc, boltz_ref, places=10)
 
     def test_vienna(self):
         em = energy.JaxNNModel()
-        self.fuzz_test(n=10, num_seq=20, em=em, tol_places=6, max_structs=50)
+        self.fuzz_test(n=40, num_seq=20, em=em, tol_places=10, max_structs=50)
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
         from jax_rnafold.common import vienna_rna, sampling
@@ -517,15 +550,6 @@ class TestSeqPartitionFunction(unittest.TestCase):
             for db_str in tqdm(all_structs):
                 seq_fn = get_seq_struct_partition_fn(em, db_str)
                 print(f"\n\tStructure: {db_str}")
-
-                """
-                try:
-                    boltz_calc, kdp, fin_dp = seq_fn(p_seq)
-                    # print(f"\t\tOur Seq PF: {boltz_calc}")
-                except:
-                    print(f"\t\tFailed structure...skipping")
-                    continue
-                """
 
                 # boltz_calc, kdp, fin_dp = seq_fn(p_seq)
                 boltz_calc = seq_fn(p_seq)
