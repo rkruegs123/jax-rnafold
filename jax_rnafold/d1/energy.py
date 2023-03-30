@@ -880,8 +880,8 @@ class TestEnergyCalculator(unittest.TestCase):
         max_structs = 50
 
         em = JaxNNModel()
-        # seq = get_rand_seq(n)
-        seq = "UCUGUCGACGGAGGGUUUAU"
+        seq = get_rand_seq(n)
+        # seq = "UCUGUCGACGGAGGGUUUAU"
         p_seq = jnp.array(seq_to_one_hot(seq))
         print(f"Sequence: {seq}")
 

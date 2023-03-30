@@ -10,8 +10,10 @@ import optax
 from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
+import jax.debug
 from jax.config import config
 config.update("jax_enable_x64", True)
+# config.update('jax_disable_jit', True)
 
 from jax_rnafold.d1 import energy
 from jax_rnafold.common.checkpoint import checkpoint_scan
@@ -36,7 +38,12 @@ else:
                              checkpoint_every=checkpoint_every)
 
 def get_seq_struct_partition_fn(em, db):
+
     n = len(db)
+
+    if db == len(db) * '.':
+        print(f"Warning: structure contains no base pairs, returning a function that always returns 1.0")
+        return lambda p_seq: 1.0
 
     ch, right = structure_tree(db)
 
@@ -65,23 +72,35 @@ def get_seq_struct_partition_fn(em, db):
         external_c.append(k)
         rec(k)
 
+
+    # Update to handle external loop nicely
+    num_c.append(len(external_c))
+    ch_idx.append(len(children))
+    children += external_c
+
+
+    n_external_c = len(external_c)
+    external_c = jnp.array(external_c)
+    # num_c_max = int(jnp.max(jnp.array(num_c + [n_external_c])))
+    num_c_max = int(jnp.max(jnp.array(num_c)))
+
     right = jnp.array(right)
     order = jnp.array(order)
     num_c = jnp.array(num_c)
     children = jnp.array(children)
     ch_idx = jnp.array(ch_idx)
-    n_external_c = len(external_c)
-    external_c = jnp.array(external_c)
 
-    num_c_max = int(jnp.max(num_c))
+
 
     # To avoid OOB errors for external loop
+    """
     if n_external_c == 0:
         last_external_c = 0.0
         first_external_c = 0.0
     else:
         last_external_c = external_c[-1]
         first_external_c = external_c[0]
+    """
 
     ## End precompute
 
@@ -231,11 +250,11 @@ def get_seq_struct_partition_fn(em, db):
             internal_fn_mapped = vmap(internal_fn_mapped, (None, None, 0, None))
             internal_fn_mapped = vmap(internal_fn_mapped, (None, 0, None, None))
             internal_fn_mapped = vmap(internal_fn_mapped, (0, None, None, None))
-            internal_sm = jnp.sum(internal_fn_mapped(N6, N6, N6, N6))
+            internal_sm = jnp.sum(internal_fn_mapped(N4, N4, N4, N4))
 
             stack_cond = (k == i+1) & (l == j-1)
             bulge_cond = (k == i+1) | (l == j-1)
-            bulge_nunpaired = jnp.where(k-i-1 > j-l-1, k-i-1, j-l-1) # FIXME: how we want to do branchless max?
+            bulge_nunpaired = jnp.where(lup > rup, lup, rup) # FIXME: how we want to do branchless max?
             return jnp.where(stack_cond,
                              em.en_stack(bi, bj, bk, bl)*p_seq[k, bk]*p_seq[l, bl]*dp[bp_idx, k],
                              jnp.where(bulge_cond,
@@ -253,14 +272,15 @@ def get_seq_struct_partition_fn(em, db):
         # en = st + num_c[i]
         # j = right[i]
 
-        left = jnp.where(i != -1, children, external_c) # FIXME: will these always be the same size?
+        # left = jnp.where(i != -1, children, external_c) # FIXME: will these always be the same size?
+        left = children
 
         n_c = num_c[i]
         # n = en-st
 
         # kdp = jnp.zeros((2, 2, n+1))
         kdp = jnp.zeros((2, 2, num_c_max+1))
-        # kdp = kdp.at[:, :, num_c_max].set(1)
+        kdp = kdp.at[:, :, num_c_max].set(1)
         # kdp = kdp.at[:, :, n_c].set(1) # Note: I think this would work too
 
         @jit
@@ -301,9 +321,10 @@ def get_seq_struct_partition_fn(em, db):
                                 jnp.sum(vmap(dangle5_fn)(N4)),
                                 0.0)
 
-                # FIXME: that final edge case with b < n-1 or last. Then, handle the indices correcty. Then, use kdp... Make sure in the condition to use n_c instead of n
-
-                no_dangle3_term_mismatch = ((b < n_c-1) | last) | (l+1 >= j) | ((b < n_c-1) & (nexti == l+1))
+                cond1 = (b < n_c-1) | (last == 1)
+                cond2 = (l+1 >= j)
+                cond3 = (b < n_c-1) & (nexti == l+1)
+                count_dangle3_term_mismatch = (cond1 & ~(cond2 | cond3))
                 def dangle3_term_mismatch_fn(blp1):
                     bit2 = jnp.where(nexti > l+2, 1, 0)
                     dangle3_sm = kdp[last, bit2, b+1]*em.en_3dangle(
@@ -317,10 +338,11 @@ def get_seq_struct_partition_fn(em, db):
                     term_mismatch_sm = jnp.where(curr == 1,
                                                  jnp.sum(vmap(term_mismatch_fn)(N4)),
                                                  0.0)
+
                     return dangle3_sm + term_mismatch_sm
-                sm += jnp.where(no_dangle3_term_mismatch,
-                                0.0,
-                                vmap(dangle3_term_mismatch_fn)(N4))
+                sm += jnp.where(count_dangle3_term_mismatch,
+                                jnp.sum(vmap(dangle3_term_mismatch_fn)(N4)),
+                                0.0)
 
                 return sm
 
@@ -330,13 +352,12 @@ def get_seq_struct_partition_fn(em, db):
                 return jnp.sum(bp_vals)
 
 
-
             get_last_curr_vals = vmap(vmap(b_last_curr_fn, (None, 0)), (0, None))
 
             last_curr_vals = get_last_curr_vals(jnp.arange(2), jnp.arange(2))
 
             curr_kdp = jnp.where(b < n_c,
-                                 curr_kdp.at[b, :, :].add(last_curr_vals),
+                                 curr_kdp.at[:, :, b].add(last_curr_vals),
                                  curr_kdp)
 
             return curr_kdp, None
@@ -346,9 +367,10 @@ def get_seq_struct_partition_fn(em, db):
 
     @jit
     def psum_kloop(i, p_seq, dp):
-        st = ch_idx[i]
-        en = st + num_c[i]
-        j = right[i]
+
+        st = jnp.where(i == -1, ch_idx[-1], ch_idx[i]) # Note: `where` unecessary, but not intended so we make it explicit
+        en = st + jnp.where(i == -1, num_c[-1], num_c[i]) # Note: same as above -- `where` is not necessary
+        j = jnp.where(i == -1, n, right[i])
 
         return _psum_kloop(i, j, st, en, p_seq, dp)
 
@@ -426,29 +448,100 @@ def get_seq_struct_partition_fn(em, db):
         fin_dp, _ = scan(fill_dp, dp, order)
 
         # External loop
-        kdp = _psum_kloop(i=-1, j=n, st=0, en=n_external_c, p_seq=p_seq, dp=fin_dp)
-        bit_last = jnp.where(right[last_external_c]+1 < n, 1, 0)
-        bit_first = jnp.where(first_external_c > 0, 1, 0)
-        boltz = jnp.where(n_external_c > 0,
-                          kdp[bit_last, bit_first, 0],
-                          1.0)
+        # kdp = _psum_kloop(i=-1, j=n, st=0, en=n_external_c, p_seq=p_seq, dp=fin_dp)
+        kdp = psum_kloop(-1, p_seq, fin_dp)
+        bit_last = jnp.where(right[external_c[-1]]+1 < n, 1, 0)
+        bit_first = jnp.where(external_c[0] > 0, 1, 0)
+        boltz = jnp.where(# n_external_c > 0,
+            num_c[-1] > 0,
+            kdp[bit_last, bit_first, 0],
+            1.0)
+        # return boltz, kdp, fin_dp
         return boltz
 
     return seq_partition
 
 
 class TestSeqPartitionFunction(unittest.TestCase):
-    def test_dummy(self):
+    def _test_dummy(self):
         em = energy.JaxNNModel()
-        db = '((...))'
+        # db = '.(....).'
+        db = '.(.(...).)'
         seq_fn = get_seq_struct_partition_fn(em, db)
 
         n = len(db)
-        p_seq = random_pseq(n)
-        p_seq = jnp.array(p_seq)
+        seq = "AGUGGUUUCC"
+        p_seq = jnp.array(seq_to_one_hot(seq))
+        # p_seq = random_pseq(n)
+        # p_seq = jnp.array(p_seq)
 
-        seq_fn(p_seq)
+        boltz_calc = seq_fn(p_seq)
+        print(f"Our Seq PF: {boltz_calc}")
+
+        boltz_ref = energy.calculate(seq, db, em)
+        print(f"Energy calculator boltz: {boltz_ref}")
+
+        from jax_rnafold.d1.seq_reference import seq_partition
+        other_boltz_ref = seq_partition(p_seq, db, em)
+        print(f"Max's reference boltz: {other_boltz_ref}")
+
         self.assertAlmostEqual(1.0, 1.0, places=7)
+
+    def test_vienna(self):
+        em = energy.JaxNNModel()
+        self.fuzz_test(n=10, num_seq=20, em=em, tol_places=6, max_structs=50)
+
+    def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
+        from jax_rnafold.common import vienna_rna, sampling
+        from jax_rnafold.common.utils import dot_bracket_2_matching, matching_2_dot_bracket
+        from jax_rnafold.common.utils import seq_to_one_hot, get_rand_seq, random_pseq
+        import random
+        from tqdm import tqdm
+
+        seqs = [get_rand_seq(n) for _ in range(num_seq)]
+
+        for seq in seqs:
+            p_seq = jnp.array(seq_to_one_hot(seq))
+            print(f"Sequence: {seq}")
+            sampler = sampling.UniformStructureSampler()
+            sampler.precomp(seq)
+            n_structs = sampler.count_structures()
+            if n_structs > max_structs:
+                all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
+            else:
+                all_structs = [sampler.get_nth(i) for i in range(n_structs)]
+            all_structs = [matching_2_dot_bracket(matching) for matching in all_structs]
+
+            print(f"Found {len(all_structs)} structures")
+
+            for db_str in tqdm(all_structs):
+                seq_fn = get_seq_struct_partition_fn(em, db_str)
+                print(f"\n\tStructure: {db_str}")
+
+                """
+                try:
+                    boltz_calc, kdp, fin_dp = seq_fn(p_seq)
+                    # print(f"\t\tOur Seq PF: {boltz_calc}")
+                except:
+                    print(f"\t\tFailed structure...skipping")
+                    continue
+                """
+
+                # boltz_calc, kdp, fin_dp = seq_fn(p_seq)
+                boltz_calc = seq_fn(p_seq)
+                print(f"\t\tOur Seq PF: {boltz_calc}")
+
+                boltz_ref = energy.calculate(seq, db_str, em)
+                print(f"\t\tEnergy calculator boltz: {boltz_ref}")
+
+                from jax_rnafold.d1.seq_reference import seq_partition
+                # other_boltz_ref, ref_kdp, ref_dp, = seq_partition(p_seq, db_str, em)
+                other_boltz_ref = seq_partition(p_seq, db_str, em)
+                print(f"\t\tMax's reference boltz: {other_boltz_ref}")
+
+                self.assertAlmostEqual(boltz_calc, boltz_ref, places=tol_places)
+
+
 
 
 if __name__ == "__main__":

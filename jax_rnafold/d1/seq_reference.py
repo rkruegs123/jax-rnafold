@@ -92,6 +92,7 @@ def seq_partition(p_seq, db, em: energy.Model, dtype=np.float64):
                                     for bim1 in range(NTS):
                                         kdp[last, curr, b] += kdp[last, int(nexti > j+2), b+1]*em.en_term_mismatch(
                                             bim1, bi, bj, bjp1)*p_seq[i-1, bim1]*p_seq[j+1, bjp1]*base
+
         return kdp
     # Must be a scan because the order is important
     for i in order:
@@ -162,6 +163,7 @@ def seq_partition(p_seq, db, em: energy.Model, dtype=np.float64):
     if len(external_c) > 0:
         boltz = kdp[int(right[external_c[-1]]+1 < n),
                     int(external_c[0] > 0), 0]
+    # return boltz, kdp, dp
     return boltz
 
 
