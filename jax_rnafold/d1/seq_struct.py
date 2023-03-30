@@ -70,9 +70,18 @@ def get_seq_struct_partition_fn(em, db):
     num_c = jnp.array(num_c)
     children = jnp.array(children)
     ch_idx = jnp.array(ch_idx)
+    n_external_c = len(external_c)
     external_c = jnp.array(external_c)
 
-    pdb.set_trace()
+    num_c_max = int(jnp.max(num_c))
+
+    # To avoid OOB errors for external loop
+    if n_external_c == 0:
+        last_external_c = 0.0
+        first_external_c = 0.0
+    else:
+        last_external_c = external_c[-1]
+        first_external_c = external_c[0]
 
     ## End precompute
 
@@ -84,6 +93,7 @@ def get_seq_struct_partition_fn(em, db):
         u = j - i - 1
 
         # FIXME: repeated computation should combine with `psum_hairpin_special()`
+        @jit
         def pr_special_hairpin(id, i, j):
             start_pos = SPECIAL_HAIRPIN_START_POS[id]
             id_len = SPECIAL_HAIRPIN_LENS[id]
@@ -97,6 +107,7 @@ def get_seq_struct_partition_fn(em, db):
             pr *= jnp.prod(prs)
             return pr
 
+        @jit
         def special_hairpin_correction(id):
             sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
             start_pos = SPECIAL_HAIRPIN_START_POS[id]
@@ -122,6 +133,7 @@ def get_seq_struct_partition_fn(em, db):
 
         up2 = j-i+1
 
+        @jit
         def pr_special_hairpin(id, i, j):
             start_pos = SPECIAL_HAIRPIN_START_POS[id]
             id_len = SPECIAL_HAIRPIN_LENS[id]
@@ -135,6 +147,7 @@ def get_seq_struct_partition_fn(em, db):
             pr *= jnp.prod(prs)
             return pr
 
+        @jit
         def special_hairpin(id):
             sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
             start_pos = SPECIAL_HAIRPIN_START_POS[id]
@@ -160,11 +173,13 @@ def get_seq_struct_partition_fn(em, db):
 
         u = j-i-1
 
+        @jit
         def u1_fn(bip1):
             return padded_p_seq[i+1, bip1] * \
                 em.en_hairpin_not_special(bi, bj, bip1, bip1, 1)
         u1_fn = vmap(u1_fn)
 
+        @jit
         def u_general_fn(bip1, bjm1):
             return padded_p_seq[i+1, bip1]*padded_p_seq[j-1, bjm1] * \
                 em.en_hairpin_not_special(bi, bj, bip1, bjm1, j-i-1)
@@ -184,7 +199,7 @@ def get_seq_struct_partition_fn(em, db):
             - psum_hairpin_special_correction(bi, bj, i, j, padded_p_seq)
 
 
-
+    @jit
     def psum_twoloop(i, j, bi, bj, p_seq, dp):
         k = children[ch_idx[i]]
         l = right[k]
@@ -192,13 +207,14 @@ def get_seq_struct_partition_fn(em, db):
         lup = k-i-1
         rup = j-l-1
 
+        @jit
         def psum_twoloop_bp(bp_idx):
             bp = bp_bases[bp_idx]
             bk = bp[0]
             bl = bp[1]
 
 
-
+            @jit
             def internal_case_fn(bip1, bjm1, bkm1, blp1):
                 invalid_cond1 = (lup == 1) & (bip1 != bkm1)
                 invalid_cond2 = (rup == 1) & (bjm1 != blp1)
@@ -232,18 +248,20 @@ def get_seq_struct_partition_fn(em, db):
         return jnp.sum(bp_vals)
 
     @jit
-    def psum_kloop(i):
-        st = ch_idx[i]
-        en = st + num_c[i]
-        j = right[i]
+    def _psum_kloop(i, j, st, en, p_seq, dp):
+        # st = ch_idx[i]
+        # en = st + num_c[i]
+        # j = right[i]
 
         left = jnp.where(i != -1, children, external_c) # FIXME: will these always be the same size?
 
-        n = num_c[i]
+        n_c = num_c[i]
         # n = en-st
 
-        kdp = jnp.zeros((2, 2, n+1))
-        kdp = kdp.at[:, :, n].set(1)
+        # kdp = jnp.zeros((2, 2, n+1))
+        kdp = jnp.zeros((2, 2, num_c_max+1))
+        # kdp = kdp.at[:, :, num_c_max].set(1)
+        # kdp = kdp.at[:, :, n_c].set(1) # Note: I think this would work too
 
         @jit
         def branch(idx):
@@ -252,55 +270,169 @@ def get_seq_struct_partition_fn(em, db):
 
         @jit
         def next_i(idx):
-            return jnp.where(idx == n-1, j, branch(idx+1)[0])
+            return jnp.where(idx == n_c-1, j, branch(idx+1)[0])
 
 
         # Note: order of b matters, so we scan
         @jit
         def b_fn(curr_kdp, b):
-            b_i, b_j = branch(b)
+            k, l = branch(b)
             nexti = next_i(b)
 
             # Return the value to be *added* to the current entry at [last, curr, b]
+            @jit
+            def b_last_curr_bp_fn(last, curr, bp_idx):
+                bp = bp_bases[bp_idx]
+                bk = bp[0]
+                bl = bp[1]
+
+                base = jnp.where(i == -1,
+                                 em.en_ext_branch(bk, bl),
+                                 em.en_multi_branch(bk, bl))
+                base = base * p_seq[k, bk] * p_seq[l, bl] * dp[bp_idx, left[st+b]]
+
+                bit = jnp.where(nexti > l+1, 1, 0)
+                sm = kdp[last, bit, b+1] * base
+
+                def dangle5_fn(bkm1):
+                    return kdp[last, bit, b+1] * em.en_5dangle(
+                        bkm1, bk, bl) * p_seq[k-1, bkm1] * base
+                sm += jnp.where(curr == 1,
+                                jnp.sum(vmap(dangle5_fn)(N4)),
+                                0.0)
+
+                # FIXME: that final edge case with b < n-1 or last. Then, handle the indices correcty. Then, use kdp... Make sure in the condition to use n_c instead of n
+
+                no_dangle3_term_mismatch = ((b < n_c-1) | last) | (l+1 >= j) | ((b < n_c-1) & (nexti == l+1))
+                def dangle3_term_mismatch_fn(blp1):
+                    bit2 = jnp.where(nexti > l+2, 1, 0)
+                    dangle3_sm = kdp[last, bit2, b+1]*em.en_3dangle(
+                        bk, bl, blp1)*p_seq[l+1, blp1]*base
+
+                    def term_mismatch_fn(bkm1):
+                        return kdp[last, bit2, b+1] \
+                            * em.en_term_mismatch(bkm1, bk, bl, blp1) \
+                            * p_seq[k-1, bkm1] * p_seq[l+1, blp1] * base
+
+                    term_mismatch_sm = jnp.where(curr == 1,
+                                                 jnp.sum(vmap(term_mismatch_fn)(N4)),
+                                                 0.0)
+                    return dangle3_sm + term_mismatch_sm
+                sm += jnp.where(no_dangle3_term_mismatch,
+                                0.0,
+                                vmap(dangle3_term_mismatch_fn)(N4))
+
+                return sm
+
+            @jit
             def b_last_curr_fn(last, curr):
-                return 1.0 # FIXME: implement
+                bp_vals = vmap(b_last_curr_bp_fn, (None, None, 0))(last, curr, N6)
+                return jnp.sum(bp_vals)
+
+
+
             get_last_curr_vals = vmap(vmap(b_last_curr_fn, (None, 0)), (0, None))
 
             last_curr_vals = get_last_curr_vals(jnp.arange(2), jnp.arange(2))
 
-            curr_kdp = curr_kdp.at[b, :, :].add(last_curr_vals)
+            curr_kdp = jnp.where(b < n_c,
+                                 curr_kdp.at[b, :, :].add(last_curr_vals),
+                                 curr_kdp)
+
             return curr_kdp, None
 
-        kdp, _ = scan(b_fn, kdp, jnp.arange(n-1, -1, -1))
+        kdp, _ = scan(b_fn, kdp, jnp.arange(num_c_max-1, -1, -1))
         return kdp
 
+    @jit
+    def psum_kloop(i, p_seq, dp):
+        st = ch_idx[i]
+        en = st + num_c[i]
+        j = right[i]
+
+        return _psum_kloop(i, j, st, en, p_seq, dp)
+
+    @jit
+    def psum_multiloop(i, j, bi, bj, p_seq, kdp):
+        lj = right[children[ch_idx[i]+num_c[i]-1]]
+        fi = children[ch_idx[i]]
+
+        bit1 = jnp.where(lj < j-1, 1, 0)
+        bit2 = jnp.where(i+1 < fi, 1, 0)
+        sm = kdp[bit1, bit2, 0]
+
+        bit3 = jnp.where(i+2 < fi, 1, 0)
+        @jit
+        def bip1_fn(bip1):
+            return kdp[bit1, bit3, 0] * \
+                em.en_3dangle_inner(bi, bip1, bj) * p_seq[i+1, bip1]
+
+        sm += jnp.where(bit2,
+                        jnp.sum(vmap(bip1_fn)(N4)),
+                        0.0)
 
 
-    def bp_fn(p_seq, dp, i, j, bp):
+        bit4 = jnp.where(lj < j-2, 1, 0)
+        @jit
+        def bjm1_fn(bjm1):
+            bjm1_sm = kdp[bit4, bit2, 0] * \
+                      em.en_5dangle_inner(bi, bjm1, bj) * p_seq[j-1, bjm1]
+
+            @jit
+            def bjm1_bip1_fn(bip1):
+                return kdp[bit4, bit3, 0] * em.en_term_mismatch_inner(
+                    bi, bip1, bjm1, bj) * p_seq[i+1, bip1] * p_seq[j-1, bjm1]
+
+            bip1_sm = jnp.where(bit2,
+                                jnp.sum(vmap(bjm1_bip1_fn)(N4)),
+                                0.0)
+            return bjm1_sm + bip1_sm
+
+        sm += jnp.where(bit1,
+                        jnp.sum(vmap(bjm1_fn)(N4)),
+                        0.0)
+
+        sm *= em.en_multi_closing(bi, bj)
+        return sm
+
+
+    @jit
+    def bp_fn(p_seq, dp, kdp, i, j, bp):
         bi = bp[0]
         bj = bp[1]
         boltz = jnp.where(num_c[i] == 0,
                           psum_hairpin(bi, bj, i, j, p_seq),
-                          jnp.where(num_c[i] == 1, psum_twoloop(i, j, bi, bj, p_seq, dp), 0.0))
+                          jnp.where(num_c[i] == 1,
+                                    psum_twoloop(i, j, bi, bj, p_seq, dp),
+                                    psum_multiloop(i, j, bi, bj, p_seq, kdp)))
         return boltz
 
 
     def seq_partition(p_seq):
         dp = jnp.zeros((NBPS, n), dtype=f64)
 
+        @jit
         def fill_dp(carry_dp, i):
             j = right[i]
 
             # Note: the `where` is unnecessary because if the condition isn't met, `kdp` isn't used
-            kdp = jnp.where(num_c[i] > 1, psum_kloop(i), jnp.zeros((2, 2, n+1)))
+            # kdp = jnp.where(num_c[i] > 1, psum_kloop(i), jnp.zeros((2, 2, n+1)))
+            kdp = psum_kloop(i, p_seq, carry_dp)
 
-            bp_vals = vmap(bp_fn, (None, None, None, None, 0))(p_seq, carry_dp, i, j, bp_bases)
+            bp_vals = vmap(bp_fn, (None, None, None, None, None, 0))(p_seq, carry_dp, kdp, i, j, bp_bases)
             carry_dp = carry_dp.at[:, i].set(bp_vals)
             return carry_dp, None
 
         fin_dp, _ = scan(fill_dp, dp, order)
 
-        return 0.0
+        # External loop
+        kdp = _psum_kloop(i=-1, j=n, st=0, en=n_external_c, p_seq=p_seq, dp=fin_dp)
+        bit_last = jnp.where(right[last_external_c]+1 < n, 1, 0)
+        bit_first = jnp.where(first_external_c > 0, 1, 0)
+        boltz = jnp.where(n_external_c > 0,
+                          kdp[bit_last, bit_first, 0],
+                          1.0)
+        return boltz
 
     return seq_partition
 
