@@ -8,6 +8,7 @@ import datetime
 import pickle
 
 import jax
+import jax.debug
 import optax
 from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
@@ -26,21 +27,32 @@ import jax_rnafold.common.nussinov as nus
 from jax_rnafold.common import vienna_rna
 from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot
 
-from jax_rnafold.d2 import dp_discrete
-from jax_rnafold.d2 import energy
-from jax_rnafold.d2.ss import get_ss_partition_fn
-from jax_rnafold.d2.seq_pf import get_seq_partition_fn
+from jax_rnafold.d2 import energy as energy_d2
+from jax_rnafold.d2 import ss as ss_d2
+from jax_rnafold.d2 import seq_pf as seq_pf_d2
+
+from jax_rnafold.d1 import energy as energy_d1
+from jax_rnafold.d1 import ss as ss_d1
+from jax_rnafold.d1 import seq_pf as seq_pf_d1
 
 
 
 def design_seq_for_struct(db_str,
-                          n_iter=50, lr=0.1, optimizer="rms-prop",
+                          n_iter=50, lr=0.1, optimizer="rms-prop", mode="d2",
                           print_every=1):
-    n = len(db_str)
-    em = energy.JaxNNModel()
 
-    seq_pf_fn = jit(get_seq_partition_fn(em, db_str))
-    ss_pf_fn = jit(get_ss_partition_fn(em, n))
+
+    n = len(db_str)
+    if mode == "d2":
+        em = energy_d2.JaxNNModel()
+        seq_pf_fn = jit(seq_pf_d2.get_seq_partition_fn(em, db_str))
+        ss_pf_fn = jit(ss_d2.get_ss_partition_fn(em, n))
+    elif mode == "d1":
+        em = energy_d1.JaxNNModel()
+        seq_pf_fn = jit(seq_pf_d1.get_seq_partition_fn(em, db_str))
+        ss_pf_fn = jit(ss_d1.get_ss_partition_fn(em, n))
+    else:
+        raise RuntimeError(f"Invalid mode: {mode}")
 
     def neg_log_prob_fn(params, key, temp):
         curr_logits = params['seq_logits']
@@ -51,6 +63,7 @@ def design_seq_for_struct(db_str,
 
         seq_pf = seq_pf_fn(p_seq)
         ss_pf = ss_pf_fn(p_seq)
+        jax.debug.breakpoint()
         return -jnp.log(seq_pf / ss_pf)
     log_prob_grad = value_and_grad(neg_log_prob_fn)
     log_prob_grad = jit(log_prob_grad)
@@ -221,8 +234,9 @@ if __name__ == "__main__":
     # pdb.set_trace()
 
 
+    mode = "d1"
     test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10)
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10, mode=mode)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]
