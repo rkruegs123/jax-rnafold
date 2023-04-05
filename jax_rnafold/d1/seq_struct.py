@@ -37,7 +37,7 @@ else:
     scan = functools.partial(checkpoint_scan,
                              checkpoint_every=checkpoint_every)
 
-def get_seq_struct_partition_fn(em, db):
+def get_seq_partition_fn(em, db):
 
     n = len(db)
 
@@ -473,7 +473,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         seq = "UAAUGAUUGUGCC"
         p_seq = jnp.array(seq_to_one_hot(seq))
 
-        seq_fn = get_seq_struct_partition_fn(em, db)
+        seq_fn = get_seq_partition_fn(em, db)
         boltz_calc, fin_kdp, fin_dp = seq_fn(p_seq)
 
         self.assertAlmostEqual(1.0, 1.0, places=10)
@@ -497,7 +497,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         em = energy.JaxNNModel()
         # db = '.(....).'
         db = '.(....).(...)'
-        seq_fn = get_seq_struct_partition_fn(em, db)
+        seq_fn = get_seq_partition_fn(em, db)
 
         n = len(db)
         # seq = "AGUGGUUUCC"
@@ -548,7 +548,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
             print(f"Found {len(all_structs)} structures")
 
             for db_str in tqdm(all_structs):
-                seq_fn = get_seq_struct_partition_fn(em, db_str)
+                seq_fn = get_seq_partition_fn(em, db_str)
                 print(f"\n\tStructure: {db_str}")
 
                 # boltz_calc, kdp, fin_dp = seq_fn(p_seq)

@@ -213,19 +213,18 @@ def run_all(optimizer="rms-prop", lr=0.1, n_iter=200, data_basedir=Path("data/")
 
 
 if __name__ == "__main__":
-    run_all()
-    pdb.set_trace()
+    # run_all()
+    # pdb.set_trace()
 
 
     # get_structs_within_length(50)
     # pdb.set_trace()
 
-    """
+
     test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=100)
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]
     fin_seq = ''.join(nucs)
     print(f"Final argmax sequence: {fin_seq}")
-    """
