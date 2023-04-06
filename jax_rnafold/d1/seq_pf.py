@@ -11,9 +11,6 @@ from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
 import jax.debug
-from jax.config import config
-config.update("jax_enable_x64", True)
-# config.update('jax_disable_jit', True)
 
 from jax_rnafold.d1 import energy
 from jax_rnafold.common.checkpoint import checkpoint_scan
@@ -25,6 +22,10 @@ from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
 from jax_rnafold.common import nussinov as nus
 from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq, matching_2_dot_bracket, bcolors, bp_bases
+
+from jax.config import config
+config.update("jax_enable_x64", True)
+config.update('jax_disable_jit', True)
 
 
 f64 = jnp.float64
@@ -280,7 +281,7 @@ def get_seq_partition_fn(em, db):
 
         # kdp = jnp.zeros((2, 2, n+1))
         kdp = jnp.zeros((2, 2, num_c_max+1))
-        kdp = kdp.at[:, :, num_c_max].set(1)
+        kdp = kdp.at[:, :, n_c].set(1)
         # kdp = kdp.at[:, :, n_c].set(1) # Note: I think this would work too
 
         @jit
@@ -320,6 +321,8 @@ def get_seq_partition_fn(em, db):
                 sm += jnp.where(curr == 1,
                                 jnp.sum(vmap(dangle5_fn)(N4)),
                                 0.0)
+
+
 
                 cond1 = (b < n_c-1) | (last == 1)
                 cond2 = (l+1 >= j)
@@ -456,8 +459,8 @@ def get_seq_partition_fn(em, db):
             num_c[-1] > 0,
             kdp[bit_last, bit_first, 0],
             1.0)
-        return boltz, kdp, fin_dp
-        # return boltz
+        # return boltz, kdp, fin_dp
+        return boltz
 
     return seq_partition
 
@@ -465,8 +468,8 @@ def get_seq_partition_fn(em, db):
 class TestSeqPartitionFunction(unittest.TestCase):
 
 
-    def test_dummy_ryan(self):
-        em = energy.JaxNNModel()
+    def _test_dummy_ryan(self):
+        em = energy.JaxNNModel("misc/rna_turner2004.par")
         # db = '.(....).(...)'
         db = "..((((((((.....))))((((.....)))))))).."
 
@@ -488,7 +491,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         self.assertAlmostEqual(1.0, 1.0, places=10)
 
     def _test_dummy_max(self):
-        em = energy.JaxNNModel()
+        em = energy.JaxNNModel("misc/rna_turner2004.par")
         # db = '.(....).(...)'
         db = "..((((((((.....))))((((.....)))))))).."
 
@@ -507,14 +510,18 @@ class TestSeqPartitionFunction(unittest.TestCase):
         self.assertAlmostEqual(1.0, 1.0, places=10)
 
     def _test_dummy(self):
-        em = energy.JaxNNModel()
+        em = energy.JaxNNModel("misc/rna_turner2004.par")
         # db = '.(....).'
-        db = '.(....).(...)'
+        # db = '.(....).(...)'
+        # db = '..(...)(...)(....)..'
+        db = '(..(...)(...)..)'
         seq_fn = get_seq_partition_fn(em, db)
 
         n = len(db)
         # seq = "AGUGGUUUCC"
-        seq = "UAAUGAUUGUGCC"
+        # seq = "UAAUGAUUGUGCC"
+        seq = "CAAGAAACGAAACAAG"
+        # seq = "GAGAAACGAAACGAAAACAC"
         p_seq = jnp.array(seq_to_one_hot(seq))
         # p_seq = random_pseq(n)
         # p_seq = jnp.array(p_seq)
@@ -533,9 +540,9 @@ class TestSeqPartitionFunction(unittest.TestCase):
 
         self.assertAlmostEqual(boltz_calc, boltz_ref, places=10)
 
-    def _test_vienna(self):
-        em = energy.JaxNNModel()
-        self.fuzz_test(n=33, num_seq=20, em=em, tol_places=10, max_structs=50)
+    def test_vienna(self):
+        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        self.fuzz_test(n=20, num_seq=16, em=em, tol_places=14, max_structs=50)
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
         from jax_rnafold.common import vienna_rna, sampling

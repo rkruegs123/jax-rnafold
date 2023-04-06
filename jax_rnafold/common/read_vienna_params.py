@@ -495,7 +495,7 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
     return data
 
 
-class ViennaParams:
+class NNParams:
     def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE,
                  postprocess=True, log=False,
                  save_sp_hairpins_jax=False
