@@ -60,7 +60,7 @@ class Model(ABC):
 
     @abstractmethod
     def en_hairpin_special(self, id):
-        # id is the index into SPECIAL_HAIRPINS
+        # id is the index into self.special_hairpins
         pass
 
     @abstractmethod
@@ -321,7 +321,7 @@ class NNModel(Model):
 
 class StandardNNModel(NNModel):
 
-    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=False, log=False,
@@ -424,7 +424,7 @@ class StandardNNModel(NNModel):
         return boltz_onp(en)
 
     def en_hairpin_special(self, id):
-        # id is the index into SPECIAL_HAIRPINS
+        # id is the index into self.special_hairpins
         en = self.nn_params.special_hairpin_energies[id]
         return boltz_onp(en)
 
@@ -484,7 +484,7 @@ class StandardNNModel(NNModel):
 
 class JaxNNModel(NNModel):
 
-    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,
@@ -556,7 +556,7 @@ class JaxNNModel(NNModel):
         return boltz_jnp(en)
 
     def en_hairpin_special(self, id):
-        # id is the index into SPECIAL_HAIRPINS
+        # id is the index into self.special_hairpins
         en = self.nn_params.special_hairpin_energies[id]
         return boltz_jnp(en)
 
@@ -900,7 +900,7 @@ class TestEnergyCalculator(unittest.TestCase):
         n = 40
         max_structs = 50
 
-        em = JaxNNModel("misc/rna_turner2004.par")
+        em = JaxNNModel()
         seq = get_rand_seq(n)
         # seq = "UCUGUCGACGGAGGGUUUAU"
         p_seq = jnp.array(seq_to_one_hot(seq))

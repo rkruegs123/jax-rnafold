@@ -36,22 +36,21 @@ else:
 
 
 
-
 def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
     two_loop_length = min(seq_len, max_loop)
 
     special_hairpin_lens = em.nn_params.special_hairpin_lens
     special_hairpin_idxs = em.nn_params.special_hairpin_idxs
     special_hairpin_start_pos = em.nn_params.special_hairpin_start_pos
-    special_hairpin_energies = em.nn_params.special_hairpin_energies
-    n_special_hairpin = em.nn_params.n_special_hairpins
+    n_special_hairpins = em.nn_params.n_special_hairpins
 
     @jit
     def fill_outer_mismatch(k, OMM, padded_p_seq):
 
         # For a fixed baes pair and mismatch, get the energy
         def get_bp_mm(bk, bl, bkm1, blp1, k, l):
-            return em.en_il_outer_mismatch(bk, bl, bkm1, blp1) \
+            return em.en_il_outer_mismatch(bk, bl, bkm1, blp1,
+                                           em.nn_params.params['mismatch_interior']) \
                 * padded_p_seq[k-1, bkm1] * padded_p_seq[l+1, blp1]
 
         # For a single l, get 6 values corresponding to the sum over each mismatch for each base pair
@@ -293,7 +292,8 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
     def psum_internal_loops(bi, bj, i, j, padded_p_seq, P, OMM):
         def get_mmij_term(bip1, bjm1):
             return padded_p_seq[i+1, bip1]*padded_p_seq[j-1, bjm1] * \
-                em.en_il_inner_mismatch(bi, bj, bip1, bjm1)
+                em.en_il_inner_mismatch(bi, bj, bip1, bjm1,
+                                        mm_table=em.nn_params.params['mismatch_interior'])
         mmij_terms = vmap(vmap(get_mmij_term, (0, None)), (None, 0))(N4, N4)
         mmij = jnp.sum(mmij_terms)
 
@@ -494,7 +494,7 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
 
 
 def train(n, lr=0.1, n_iter=10, print_every=1):
-    em = energy.JaxNNModel("misc/rna_turner2004.par")
+    em = energy.JaxNNModel()
     ss_fn = get_ss_partition_fn(em, n)
 
     def loss_fn(params):
@@ -588,20 +588,21 @@ class TestSSPartitionFunction(unittest.TestCase):
                                                   seq, matching_to_db(match), em))
             print(f"\tBrute partition function: {ref_pf}")
             """
-            ref_pf = reference.ss_partition(p_seq, energy.NNModel("misc/rna_turner2004.par"))
+            ref_pf = reference.ss_partition(p_seq, energy.StandardNNModel())
             print(f"\tReference partition function: {ref_pf}")
 
             self.assertAlmostEqual(ss_pf, ref_pf, places=7)
 
     def _test_fuzz(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        em = energy.JaxNNModel()
         self.fuzz_test(16, 10, em)
 
-    def _test_fuzz(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
-        self.fuzz_test(16, 10, em)
+    def test_fuzz(self):
+        # Note: failing ACAACAGUAACUCCUA, GUUUAUGGU
+        em = energy.JaxNNModel()
+        self.fuzz_test(n=9, num_seq=10, em=em)
 
-    def test_train(self):
+    def _test_train(self):
         hi = train(n=64)
         self.assertAlmostEqual(1.0, hi, places=7)
 

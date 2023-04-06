@@ -15,8 +15,6 @@ import jax.debug
 from jax_rnafold.d1 import energy
 from jax_rnafold.common.checkpoint import checkpoint_scan
 from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, structure_tree, NBPS, N6
-from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
-    SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
@@ -38,7 +36,12 @@ else:
     scan = functools.partial(checkpoint_scan,
                              checkpoint_every=checkpoint_every)
 
-def get_seq_partition_fn(em, db):
+def get_seq_partition_fn(em : energy.NNModel, db):
+
+    special_hairpin_lens = em.nn_params.special_hairpin_lens
+    special_hairpin_idxs = em.nn_params.special_hairpin_idxs
+    special_hairpin_start_pos = em.nn_params.special_hairpin_start_pos
+    n_special_hairpins = em.nn_params.n_special_hairpins
 
     n = len(db)
 
@@ -115,12 +118,12 @@ def get_seq_partition_fn(em, db):
         # FIXME: repeated computation should combine with `psum_hairpin_special()`
         @jit
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(n+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -129,22 +132,22 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def special_hairpin_correction(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
-            bjm1 = SPECIAL_HAIRPIN_IDXS[end_pos - 1]
-            bip1 = SPECIAL_HAIRPIN_IDXS[start_pos + 1]
+            bjm1 = special_hairpin_idxs[end_pos - 1]
+            bip1 = special_hairpin_idxs[start_pos + 1]
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_not_special(
                                  bi, bj, bip1, bjm1, sp_hairpin_len - 2),
                              0.0)
 
-        summands = vmap(special_hairpin_correction)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin_correction)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
@@ -155,12 +158,12 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(n+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -169,19 +172,19 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def special_hairpin(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_special(id),
                              0.0)
 
-        summands = vmap(special_hairpin)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
@@ -469,7 +472,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
 
 
     def _test_dummy_ryan(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        em = energy.JaxNNModel()
         # db = '.(....).(...)'
         db = "..((((((((.....))))((((.....)))))))).."
 
@@ -491,7 +494,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         self.assertAlmostEqual(1.0, 1.0, places=10)
 
     def _test_dummy_max(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        em = energy.JaxNNModel()
         # db = '.(....).(...)'
         db = "..((((((((.....))))((((.....)))))))).."
 
@@ -510,7 +513,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         self.assertAlmostEqual(1.0, 1.0, places=10)
 
     def _test_dummy(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        em = energy.JaxNNModel()
         # db = '.(....).'
         # db = '.(....).(...)'
         # db = '..(...)(...)(....)..'
@@ -541,7 +544,7 @@ class TestSeqPartitionFunction(unittest.TestCase):
         self.assertAlmostEqual(boltz_calc, boltz_ref, places=10)
 
     def test_vienna(self):
-        em = energy.JaxNNModel("misc/rna_turner2004.par")
+        em = energy.JaxNNModel()
         self.fuzz_test(n=20, num_seq=16, em=em, tol_places=14, max_structs=50)
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
