@@ -22,7 +22,7 @@ for id in range(N_SPECIAL_HAIRPINS):
     hairpin_seq = SPECIAL_HAIRPINS[id]
     u = len(hairpin_seq) - 2
     if u == 3 and hairpin_seq in vienna_params['triloops'].keys():
-        en =  jax_vienna_params['triloops'][hairpin_seq]
+        en = jax_vienna_params['triloops'][hairpin_seq]
     elif u == 4 and hairpin_seq in vienna_params['tetraloops'].keys():
         en = jax_vienna_params['tetraloops'][hairpin_seq]
     elif u == 6 and hairpin_seq in vienna_params['hexaloops'].keys():

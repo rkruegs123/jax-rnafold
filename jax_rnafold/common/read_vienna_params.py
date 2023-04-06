@@ -495,6 +495,61 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
     return data
 
 
+class ViennaParams:
+    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE,
+                 postprocess=True, log=False,
+                 save_sp_hairpins_jax=False
+    ):
+        self.params = read(params_path)
+
+        self.special_hexaloops = list(params['hexaloops'].keys())
+        self.special_tetraloops = list(params['tetraloops'].keys())
+        self.special_triloops = list(params['triloops'].keys())
+        self.special_hairpins = self.special_hexaloops + self.special_tetraloops \
+                                + self.special_triloops
+        self.n_special_hairpins = len(self.special_hairpins)
+
+        special_hairpin_energies = list()
+
+        for _id in range(self.n_special_hairpins):
+            hairpin_seq = self.special_hairpins[_id]
+            u = len(hairpin_seq) - 2
+            if u == 3 and hairpin_seq in self.special_triloops:
+                en = self.params['triloops'][hairpin_seq]
+            elif u == 4 and hairpin_seq in self.special_tetraloops:
+                en = self.params['tetraloops'][hairpin_seq]
+            elif u == 6 and hairpin_seq in self.special_hexaloops:
+                en = self.params['hexaloops'][hairpin_seq]
+            else:
+                raise RuntimeError(f"Could not find energy for special hairpin: {hairpin_seq}")
+            special_hairpin_energies.append(en)
+
+        if save_sp_hairpins_jax:
+            self.special_hairpin_energies = jnp.array(special_hairpin_energies, dtype=jnp.float64)
+        else:
+            self.special_hairpin_energies = np.array(special_hairpin_energies, dtype=np.float64)
+
+        special_hairpin_lens = [len(sp_hairpin) for sp_hairpin in self.special_hairpins] # array 1: length of each special hairpin
+        if save_sp_hairpins_jax:
+            self.special_hairpin_lens = jnp.array(special_hairpin_lens)
+        else:
+            self.special_hairpin_lens = np.array(special_hairpin_lens)
+
+        special_hairpin_idxs = list() # array 2: all characters concatenated
+        special_hairpin_start_pos = list() # array 3: start position for each in array 2
+        idx = 0
+        for sp_hairpin in self.special_hairpins:
+            special_hairpin_start_pos.append(idx)
+            for nuc in sp_hairpin:
+                special_hairpin_idxs.append(RNA_ALPHA.index(nuc))
+                idx += 1
+        if save_sp_hairpins_jax:
+            self.special_hairpin_idxs = jnp.array(special_hairpin_idxs)
+            self.special_hairpin_start_pos = jnp.array(special_hairpin_start_pos) # has size (self.n_special_hairpins,)
+        else:
+            self.special_hairpin_idxs = np.array(special_hairpin_idxs)
+            self.special_hairpin_start_pos = np.array(special_hairpin_start_pos) # has size (self.n_special_hairpins,)
+
 
 
 if __name__ == "__main__":

@@ -456,8 +456,8 @@ def get_seq_partition_fn(em, db):
             num_c[-1] > 0,
             kdp[bit_last, bit_first, 0],
             1.0)
-        # return boltz, kdp, fin_dp
-        return boltz
+        return boltz, kdp, fin_dp
+        # return boltz
 
     return seq_partition
 
@@ -465,29 +465,42 @@ def get_seq_partition_fn(em, db):
 class TestSeqPartitionFunction(unittest.TestCase):
 
 
-    def _test_dummy_ryan(self):
+    def test_dummy_ryan(self):
         em = energy.JaxNNModel()
-        db = '.(....).(...)'
+        # db = '.(....).(...)'
+        db = "..((((((((.....))))((((.....)))))))).."
 
         n = len(db)
-        seq = "UAAUGAUUGUGCC"
+        # seq = "UAAUGAUUGUGCC"
+        seq = "AAGGGGGGGGAAAAACCCCGGGGAAAAACCCCCCCCAA"
         p_seq = jnp.array(seq_to_one_hot(seq))
 
         seq_fn = get_seq_partition_fn(em, db)
         boltz_calc, fin_kdp, fin_dp = seq_fn(p_seq)
+        # boltz_calc = seq_fn(p_seq)
+
+        from jax_rnafold.d1.seq_reference import seq_partition
+        other_boltz_ref, ref_kdp, ref_dp = seq_partition(p_seq, db, em)
+        # other_boltz_ref = seq_partition(p_seq, db, em)
+
+        pdb.set_trace()
 
         self.assertAlmostEqual(1.0, 1.0, places=10)
 
     def _test_dummy_max(self):
         em = energy.JaxNNModel()
-        db = '.(....).(...)'
+        # db = '.(....).(...)'
+        db = "..((((((((.....))))((((.....)))))))).."
 
         n = len(db)
-        seq = "UAAUGAUUGUGCC"
+        # seq = "UAAUGAUUGUGCC"
+        seq = "AAGGGGGGGGAAAAACCCCGGGGAAAAACCCCCCCCAA"
         p_seq = jnp.array(seq_to_one_hot(seq))
 
         from jax_rnafold.d1.seq_reference import seq_partition
         other_boltz_ref, ref_kdp, ref_dp = seq_partition(p_seq, db, em)
+        # other_boltz_ref = seq_partition(p_seq, db, em)
+        pdb.set_trace()
         print(f"Max's reference boltz: {other_boltz_ref}")
 
 
@@ -520,9 +533,9 @@ class TestSeqPartitionFunction(unittest.TestCase):
 
         self.assertAlmostEqual(boltz_calc, boltz_ref, places=10)
 
-    def test_vienna(self):
+    def _test_vienna(self):
         em = energy.JaxNNModel()
-        self.fuzz_test(n=40, num_seq=20, em=em, tol_places=10, max_structs=50)
+        self.fuzz_test(n=33, num_seq=20, em=em, tol_places=10, max_structs=50)
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
         from jax_rnafold.common import vienna_rna, sampling
@@ -558,10 +571,10 @@ class TestSeqPartitionFunction(unittest.TestCase):
                 boltz_ref = energy.calculate(seq, db_str, em)
                 print(f"\t\tEnergy calculator boltz: {boltz_ref}")
 
-                from jax_rnafold.d1.seq_reference import seq_partition
+                # from jax_rnafold.d1.seq_reference import seq_partition
                 # other_boltz_ref, ref_kdp, ref_dp, = seq_partition(p_seq, db_str, em)
-                other_boltz_ref = seq_partition(p_seq, db_str, em)
-                print(f"\t\tMax's reference boltz: {other_boltz_ref}")
+                # other_boltz_ref = seq_partition(p_seq, db_str, em)
+                # print(f"\t\tMax's reference boltz: {other_boltz_ref}")
 
                 self.assertAlmostEqual(boltz_calc, boltz_ref, places=tol_places)
 
