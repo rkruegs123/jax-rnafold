@@ -502,9 +502,9 @@ class ViennaParams:
     ):
         self.params = read(params_path)
 
-        self.special_hexaloops = list(params['hexaloops'].keys())
-        self.special_tetraloops = list(params['tetraloops'].keys())
-        self.special_triloops = list(params['triloops'].keys())
+        self.special_hexaloops = list(self.params['hexaloops'].keys())
+        self.special_tetraloops = list(self.params['tetraloops'].keys())
+        self.special_triloops = list(self.params['triloops'].keys())
         self.special_hairpins = self.special_hexaloops + self.special_tetraloops \
                                 + self.special_triloops
         self.n_special_hairpins = len(self.special_hairpins)
