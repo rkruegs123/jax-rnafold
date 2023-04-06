@@ -280,7 +280,8 @@ def get_seq_partition_fn(em, db):
 
         # kdp = jnp.zeros((2, 2, n+1))
         kdp = jnp.zeros((2, 2, num_c_max+1))
-        kdp = kdp.at[:, :, num_c_max].set(1)
+        # kdp = kdp.at[:, :, num_c_max].set(1)
+        kdp = kdp.at[:, :, n_c].set(1)
         # kdp = kdp.at[:, :, n_c].set(1) # Note: I think this would work too
 
         @jit
