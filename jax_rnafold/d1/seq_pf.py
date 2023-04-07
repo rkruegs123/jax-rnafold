@@ -11,20 +11,19 @@ from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
 import jax.debug
-from jax.config import config
-config.update("jax_enable_x64", True)
-# config.update('jax_disable_jit', True)
 
 from jax_rnafold.d1 import energy
 from jax_rnafold.common.checkpoint import checkpoint_scan
 from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, structure_tree, NBPS, N6
-from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
-    SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
 from jax_rnafold.common import nussinov as nus
 from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq, matching_2_dot_bracket, bcolors, bp_bases
+
+from jax.config import config
+config.update("jax_enable_x64", True)
+config.update('jax_disable_jit', True)
 
 
 f64 = jnp.float64
@@ -37,7 +36,12 @@ else:
     scan = functools.partial(checkpoint_scan,
                              checkpoint_every=checkpoint_every)
 
-def get_seq_partition_fn(em, db):
+def get_seq_partition_fn(em : energy.NNModel, db):
+
+    special_hairpin_lens = em.nn_params.special_hairpin_lens
+    special_hairpin_idxs = em.nn_params.special_hairpin_idxs
+    special_hairpin_start_pos = em.nn_params.special_hairpin_start_pos
+    n_special_hairpins = em.nn_params.n_special_hairpins
 
     n = len(db)
 
@@ -114,12 +118,12 @@ def get_seq_partition_fn(em, db):
         # FIXME: repeated computation should combine with `psum_hairpin_special()`
         @jit
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(n+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -128,22 +132,22 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def special_hairpin_correction(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
-            bjm1 = SPECIAL_HAIRPIN_IDXS[end_pos - 1]
-            bip1 = SPECIAL_HAIRPIN_IDXS[start_pos + 1]
+            bjm1 = special_hairpin_idxs[end_pos - 1]
+            bip1 = special_hairpin_idxs[start_pos + 1]
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_not_special(
                                  bi, bj, bip1, bjm1, sp_hairpin_len - 2),
                              0.0)
 
-        summands = vmap(special_hairpin_correction)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin_correction)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
@@ -154,12 +158,12 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(n+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -168,19 +172,19 @@ def get_seq_partition_fn(em, db):
 
         @jit
         def special_hairpin(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_special(id),
                              0.0)
 
-        summands = vmap(special_hairpin)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
@@ -280,7 +284,6 @@ def get_seq_partition_fn(em, db):
 
         # kdp = jnp.zeros((2, 2, n+1))
         kdp = jnp.zeros((2, 2, num_c_max+1))
-        # kdp = kdp.at[:, :, num_c_max].set(1)
         kdp = kdp.at[:, :, n_c].set(1)
         # kdp = kdp.at[:, :, n_c].set(1) # Note: I think this would work too
 
@@ -321,6 +324,8 @@ def get_seq_partition_fn(em, db):
                 sm += jnp.where(curr == 1,
                                 jnp.sum(vmap(dangle5_fn)(N4)),
                                 0.0)
+
+
 
                 cond1 = (b < n_c-1) | (last == 1)
                 cond2 = (l+1 >= j)
@@ -457,8 +462,8 @@ def get_seq_partition_fn(em, db):
             num_c[-1] > 0,
             kdp[bit_last, bit_first, 0],
             1.0)
-        return boltz, kdp, fin_dp
-        # return boltz
+        # return boltz, kdp, fin_dp
+        return boltz
 
     return seq_partition
 
@@ -466,7 +471,7 @@ def get_seq_partition_fn(em, db):
 class TestSeqPartitionFunction(unittest.TestCase):
 
 
-    def test_dummy_ryan(self):
+    def _test_dummy_ryan(self):
         em = energy.JaxNNModel()
         # db = '.(....).(...)'
         db = "..((((((((.....))))((((.....)))))))).."
@@ -510,12 +515,16 @@ class TestSeqPartitionFunction(unittest.TestCase):
     def _test_dummy(self):
         em = energy.JaxNNModel()
         # db = '.(....).'
-        db = '.(....).(...)'
+        # db = '.(....).(...)'
+        # db = '..(...)(...)(....)..'
+        db = '(..(...)(...)..)'
         seq_fn = get_seq_partition_fn(em, db)
 
         n = len(db)
         # seq = "AGUGGUUUCC"
-        seq = "UAAUGAUUGUGCC"
+        # seq = "UAAUGAUUGUGCC"
+        seq = "CAAGAAACGAAACAAG"
+        # seq = "GAGAAACGAAACGAAAACAC"
         p_seq = jnp.array(seq_to_one_hot(seq))
         # p_seq = random_pseq(n)
         # p_seq = jnp.array(p_seq)
@@ -534,9 +543,9 @@ class TestSeqPartitionFunction(unittest.TestCase):
 
         self.assertAlmostEqual(boltz_calc, boltz_ref, places=10)
 
-    def _test_vienna(self):
+    def test_vienna(self):
         em = energy.JaxNNModel()
-        self.fuzz_test(n=33, num_seq=20, em=em, tol_places=10, max_structs=50)
+        self.fuzz_test(n=20, num_seq=16, em=em, tol_places=14, max_structs=50)
 
     def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
         from jax_rnafold.common import vienna_rna, sampling

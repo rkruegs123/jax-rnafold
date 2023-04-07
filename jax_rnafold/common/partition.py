@@ -1,4 +1,4 @@
-from jax_rnafold.common.utils import RNA_ALPHA, ALL_PAIRS, SPECIAL_HAIRPINS, NTS
+from jax_rnafold.common.utils import RNA_ALPHA, ALL_PAIRS, NTS
 
 
 def get_bp_bases(bp):
@@ -24,43 +24,43 @@ def psum_hairpin_not_special(p_seq, em, bi, bj, i, j):
     return sm
 
 
-def pr_special_hairpin(p_seq, id, i, j):
+def pr_special_hairpin(p_seq, em, id, i, j):
     pr = 1
     for k in range(i+1, j):
         # .index can be replace with a table
-        pr *= p_seq[k, RNA_ALPHA.index(SPECIAL_HAIRPINS[id][k-i])]
+        pr *= p_seq[k, RNA_ALPHA.index(em.special_hairpins[id][k-i])]
     return pr
 
 
 def psum_hairpin_special(p_seq, em, bi, bj, i, j):
     sm = 0
-    for id in range(len(SPECIAL_HAIRPINS)):
+    for id in range(len(em.special_hairpins)):
         # Can be made branchless
-        if SPECIAL_HAIRPINS[id][0] != RNA_ALPHA[bi]:
+        if em.special_hairpins[id][0] != RNA_ALPHA[bi]:
             continue
-        if SPECIAL_HAIRPINS[id][-1] != RNA_ALPHA[bj]:
+        if em.special_hairpins[id][-1] != RNA_ALPHA[bj]:
             continue
-        if len(SPECIAL_HAIRPINS[id]) != j-i+1:
+        if len(em.special_hairpins[id]) != j-i+1:
             continue
-        sm += pr_special_hairpin(p_seq, id, i, j) * em.en_hairpin_special(id)
+        sm += pr_special_hairpin(p_seq, em, id, i, j) * em.en_hairpin_special(id)
     return sm
 
 
 def psum_hairpin_special_correction(p_seq, em, bi, bj, i, j):
     sm = 0
-    for id in range(len(SPECIAL_HAIRPINS)):
+    for id in range(len(em.special_hairpins)):
         # Can be made branchless
-        if SPECIAL_HAIRPINS[id][0] != RNA_ALPHA[bi]:
+        if em.special_hairpins[id][0] != RNA_ALPHA[bi]:
             continue
-        if SPECIAL_HAIRPINS[id][-1] != RNA_ALPHA[bj]:
+        if em.special_hairpins[id][-1] != RNA_ALPHA[bj]:
             continue
-        if len(SPECIAL_HAIRPINS[id]) != j-i+1:
+        if len(em.special_hairpins[id]) != j-i+1:
             continue
         # .index can be replace with a table
-        bip1 = RNA_ALPHA.index(SPECIAL_HAIRPINS[id][1])
-        bjm1 = RNA_ALPHA.index(SPECIAL_HAIRPINS[id][-2])
-        sm += pr_special_hairpin(p_seq, id, i, j) * em.en_hairpin_not_special(
-            bi, bj, bip1, bjm1, len(SPECIAL_HAIRPINS[id])-2)
+        bip1 = RNA_ALPHA.index(em.special_hairpins[id][1])
+        bjm1 = RNA_ALPHA.index(em.special_hairpins[id][-2])
+        sm += pr_special_hairpin(p_seq, em, id, i, j) * em.en_hairpin_not_special(
+            bi, bj, bip1, bjm1, len(em.special_hairpins[id])-2)
     return sm
 
 

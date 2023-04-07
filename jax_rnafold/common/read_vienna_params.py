@@ -495,12 +495,14 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
     return data
 
 
-class ViennaParams:
-    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE,
+class NNParams:
+    def __init__(self, params_path="misc/rna_turner2004.par",
+                 max_precompute=MAX_PRECOMPUTE,
                  postprocess=True, log=False,
                  save_sp_hairpins_jax=False
     ):
-        self.params = read(params_path)
+        self.params = read(params_path, max_precompute=max_precompute,
+                           postprocess=postprocess, log=log)
 
         self.special_hexaloops = list(self.params['hexaloops'].keys())
         self.special_tetraloops = list(self.params['tetraloops'].keys())

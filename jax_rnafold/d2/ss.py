@@ -14,8 +14,6 @@ config.update("jax_enable_x64", True)
 
 from jax_rnafold.common.checkpoint import checkpoint_scan
 from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE
-from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
-    SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
@@ -39,8 +37,14 @@ else:
 
 
 # TODO: remove all unnecessary n parameterizations
-def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
+def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
     two_loop_length = min(seq_len, max_loop)
+
+    special_hairpin_lens = em.nn_params.special_hairpin_lens
+    special_hairpin_idxs = em.nn_params.special_hairpin_idxs
+    special_hairpin_start_pos = em.nn_params.special_hairpin_start_pos
+    special_hairpin_energies = em.nn_params.special_hairpin_energies
+    n_special_hairpins = em.nn_params.n_special_hairpins
 
     @jit
     def fill_outer_mismatch(k, OMM, padded_p_seq):
@@ -85,12 +89,12 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
         # FIXME: repeated computation should combine with `psum_hairpin_special()`
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(seq_len+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -98,22 +102,22 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             return pr
 
         def special_hairpin_correction(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
-            bjm1 = SPECIAL_HAIRPIN_IDXS[end_pos - 1]
-            bip1 = SPECIAL_HAIRPIN_IDXS[start_pos + 1]
+            bjm1 = special_hairpin_idxs[end_pos - 1]
+            bip1 = special_hairpin_idxs[start_pos + 1]
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_not_special(
                                  bi, bj, bip1, bjm1, sp_hairpin_len - 2),
                              0.0)
 
-        summands = vmap(special_hairpin_correction)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin_correction)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
@@ -124,12 +128,12 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
         up2 = j-i+1
 
         def pr_special_hairpin(id, i, j):
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
-            id_len = SPECIAL_HAIRPIN_LENS[id]
+            start_pos = special_hairpin_start_pos[id]
+            id_len = special_hairpin_lens[id]
             def get_sp_hairpin_nuc_prob(k):
                 cond = (k >= i+1) & (k < j)
                 idx_pos = start_pos + (k-i)
-                return jnp.where(cond, padded_p_seq[k, SPECIAL_HAIRPIN_IDXS[idx_pos]], 1.0)
+                return jnp.where(cond, padded_p_seq[k, special_hairpin_idxs[idx_pos]], 1.0)
             ks = jnp.arange(seq_len+1) # FIXME: is this correct?
             prs = vmap(get_sp_hairpin_nuc_prob)(ks)
             pr = 1 # we know i and j match
@@ -137,19 +141,19 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             return pr
 
         def special_hairpin(id):
-            sp_hairpin_len = SPECIAL_HAIRPIN_LENS[id]
-            start_pos = SPECIAL_HAIRPIN_START_POS[id]
+            sp_hairpin_len = special_hairpin_lens[id]
+            start_pos = special_hairpin_start_pos[id]
             end_pos = start_pos + sp_hairpin_len - 1
 
-            id_valid = (SPECIAL_HAIRPIN_LENS[id] == up2) \
-                       & (SPECIAL_HAIRPIN_IDXS[start_pos] == bi) \
-                       & (SPECIAL_HAIRPIN_IDXS[end_pos] == bj)
+            id_valid = (special_hairpin_lens[id] == up2) \
+                       & (special_hairpin_idxs[start_pos] == bi) \
+                       & (special_hairpin_idxs[end_pos] == bj)
 
             return jnp.where(id_valid,
                              pr_special_hairpin(id, i, j) * em.en_hairpin_special(id),
                              0.0)
 
-        summands = vmap(special_hairpin)(jnp.arange(N_SPECIAL_HAIRPINS))
+        summands = vmap(special_hairpin)(jnp.arange(n_special_hairpins))
         sm = jnp.sum(summands)
         return sm
 
