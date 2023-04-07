@@ -80,11 +80,11 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
 
     def fill_multi(i, padded_p_seq, ML, P):
         def nb_j_fn(nb, j):
-            j_cond = (j > i) & (j < seq_len+1)
+            j_cond = (j >= i) & (j < seq_len+1)
             b_idx = jnp.where(nb-1 > 0, nb-1, 0)
 
             def k_fn(k):
-                k_cond = (k > i) & (k < j+1)
+                k_cond = (k >= i) & (k < j+1)
 
                 def bi_bk_fn(bi, bk):
 
@@ -104,14 +104,14 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
                     bip1_bkm1_fn = lambda bip1, bkm1: base_en * P[bip1, bkm1, i+1, k-1] \
                                    * em.en_multi_branch(bip1, bkm1) * padded_p_seq[i+1, bip1] \
                                    * padded_p_seq[k-1, bkm1] * em.en_term_mismatch(bi, bip1, bkm1, bk)
-                    bip1_bkm1_sm = vmap(vmap(bip1_bkm1_fn, (0, None)), (None, 0))(N4, N4)
+                    bip1_bkm1_sm = jnp.sum(vmap(vmap(bip1_bkm1_fn, (0, None)), (None, 0))(N4, N4))
 
                     return k_bi_bk_sm + bip1_sm + bkm1_sm + bip1_bkm1_sm
 
                 bi_bk_sm = jnp.sum(vmap(vmap(bi_bk_fn, (0, None)), (None, 0))(N4, N4))
                 return jnp.where(k_cond, bi_bk_sm, 0.0)
 
-            k_sm = jnp.sum(vmap(k_fn)(jnp.arange(seq_len+2)))
+            k_sm = jnp.sum(vmap(k_fn)(jnp.arange(seq_len+1)))
             return jnp.where(j_cond, k_sm + ML[nb, i+1, j], ML[nb, i, j])
 
         get_all_nb_j = vmap(vmap(nb_j_fn, (None, 0)), (0, None))
@@ -532,7 +532,6 @@ def train(n, lr=0.1, n_iter=10, print_every=1):
 
 class TestSSPartitionFunction(unittest.TestCase):
 
-
     def _random_seq_test(self, n, em):
         import jax_rnafold.d1.ss_reference as reference
 
@@ -573,6 +572,7 @@ class TestSSPartitionFunction(unittest.TestCase):
 
         failed_cases = list()
         for seq in seqs:
+
             p_seq = jnp.array(seq_to_one_hot(seq))
 
             print(f"Sequence: {seq}")
@@ -589,19 +589,17 @@ class TestSSPartitionFunction(unittest.TestCase):
                                                   seq, matching_to_db(match), em))
             print(f"\tBrute partition function: {ref_pf}")
             """
+
+            # ref_pf, ref_OMM, ref_P, ref_ML, ref_E = reference.ss_partition(p_seq, energy.StandardNNModel())
             ref_pf = reference.ss_partition(p_seq, energy.StandardNNModel())
 
             print(f"\tReference partition function: {ref_pf}")
 
             self.assertAlmostEqual(ss_pf, ref_pf, places=10)
 
-    def _test_fuzz(self):
-        em = energy.JaxNNModel()
-        self.fuzz_test(16, 10, em)
-
     def test_fuzz(self):
         em = energy.JaxNNModel()
-        self.fuzz_test(n=9, num_seq=10, em=em)
+        self.fuzz_test(n=18, num_seq=10, em=em, tol_places=14)
 
 
     def _test_train(self):

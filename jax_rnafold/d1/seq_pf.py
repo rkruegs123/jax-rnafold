@@ -578,7 +578,8 @@ class TestSeqPartitionFunction(unittest.TestCase):
                 boltz_calc = seq_fn(p_seq)
                 print(f"\t\tOur Seq PF: {boltz_calc}")
 
-                boltz_ref = energy.calculate(seq, db_str, em)
+                # boltz_ref = energy.calculate(seq, db_str, em)
+                boltz_ref = energy.calculate(seq, db_str, energy.StandardNNModel())
                 print(f"\t\tEnergy calculator boltz: {boltz_ref}")
 
                 # from jax_rnafold.d1.seq_reference import seq_partition
