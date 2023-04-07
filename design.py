@@ -63,7 +63,6 @@ def design_seq_for_struct(db_str,
 
         seq_pf = seq_pf_fn(p_seq)
         ss_pf = ss_pf_fn(p_seq)
-        jax.debug.breakpoint()
         return -jnp.log(seq_pf / ss_pf)
     log_prob_grad = value_and_grad(neg_log_prob_fn)
     log_prob_grad = jit(log_prob_grad)
@@ -236,7 +235,7 @@ if __name__ == "__main__":
 
     mode = "d1"
     test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10, mode=mode)
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=200, mode=mode)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]

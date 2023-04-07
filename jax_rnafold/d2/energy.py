@@ -11,7 +11,7 @@ config.update("jax_enable_x64", True)
 from jax_rnafold.common.utils import RNA_ALPHA, INVALID_BASE, RNA_ALPHA_IDX
 from jax_rnafold.common.utils import VALID_PAIRS
 from jax_rnafold.common.utils import boltz_onp, boltz_jnp
-from jax_rnafold.common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP
+from jax_rnafold.common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP, MAX_PRECOMPUTE
 from jax_rnafold.common.utils import all_pairs_mat, non_gc_pairs_mat
 from jax_rnafold.common import utils
 from jax_rnafold.common import read_vienna_params

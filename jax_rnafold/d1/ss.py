@@ -78,6 +78,7 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
         OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T)
         return OMM
 
+    @jit
     def fill_multi(i, padded_p_seq, ML, P):
         def nb_j_fn(nb, j):
             j_cond = (j >= i) & (j < seq_len+1)
@@ -119,7 +120,7 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
 
         return ML.at[:, i, :].set(all_nb_j)
 
-
+    @jit
     def fill_external(i, padded_p_seq, P, E):
         def j_fn(j):
             cond = (j >= i+1) & (j < seq_len+1)

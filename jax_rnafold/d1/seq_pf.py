@@ -23,7 +23,6 @@ from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq, 
 
 from jax.config import config
 config.update("jax_enable_x64", True)
-config.update('jax_disable_jit', True)
 
 
 f64 = jnp.float64
