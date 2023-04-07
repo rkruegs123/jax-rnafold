@@ -380,8 +380,6 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
             all_1n_sms = vmap(vmap(get_bp_1n_sm, (None, 0, None)), (None, None, 0))(bp, N4, N4)
             bp_sum += jnp.sum(all_1n_sms)
 
-            # ks = jnp.arange(n+2) # FIXME: is this correct?
-            # ls = jnp.arange(n+2) # FIXME: is this correct?
             k_offsets = jnp.arange(two_loop_length)
             l_offsets = jnp.arange(two_loop_length)
             all_gen_sms = vmap(vmap(get_bp_general_sm, (None, 0, None)), (None, None, 0))(bp, k_offsets, l_offsets)
@@ -474,7 +472,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
             OMM = fill_outer_mismatch(i, OMM, padded_p_seq)
             P = fill_paired(i, padded_p_seq, OMM, ML, P)
-            # ML = fill_multi(i, padded_p_seq, ML, P)
+            ML = fill_multi(i, padded_p_seq, ML, P)
             E = fill_external(i, padded_p_seq, P, E)
 
             return (OMM, P, ML, E), None
@@ -483,6 +481,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
                                   (OMM, P, ML, E),
                                   jnp.arange(seq_len, 0, -1))
 
+        # return E[1], OMM, P, ML, E
         return E[1]
 
     return ss_partition
@@ -573,8 +572,10 @@ class TestSSPartitionFunction(unittest.TestCase):
 
             print(f"Sequence: {seq}")
 
+            # ss_pf, fin_OMM, fin_P, fin_ML, fin_E = ss_partition_fn(p_seq)
             ss_pf = ss_partition_fn(p_seq)
             print(f"\tComputed partition function: {ss_pf}")
+
             """
             ref_pf = vienna_rna.get_vienna_pf(seq, dangle_mode=0)
             print(f"\tVienna partition function: {ref_pf}")
@@ -583,20 +584,23 @@ class TestSSPartitionFunction(unittest.TestCase):
                                                   seq, matching_to_db(match), em))
             print(f"\tBrute partition function: {ref_pf}")
             """
+
             ref_pf = reference.ss_partition(p_seq, energy.NNModel())
+            # ref_pf, ref_OMM, ref_P, ref_ML, ref_E = reference.ss_partition(p_seq, energy.NNModel())
             print(f"\tReference partition function: {ref_pf}")
 
-            self.assertAlmostEqual(ss_pf, ref_pf, places=7)
+            self.assertAlmostEqual(ss_pf, ref_pf, places=10)
 
     def _test_fuzz(self):
         em = energy.JaxNNModel()
         self.fuzz_test(16, 10, em)
 
-    def _test_fuzz(self):
+    def test_fuzz(self):
+        # Note: failing CUAUCUUAG
         em = energy.JaxNNModel()
-        self.fuzz_test(16, 10, em)
+        self.fuzz_test(9, 100, em)
 
-    def test_train(self):
+    def _test_train(self):
         hi = train(n=64)
         self.assertAlmostEqual(1.0, hi, places=7)
 

@@ -188,6 +188,7 @@ def ss_partition(p_seq, em: energy.Model, dtype=np.float64):
         fill_multi(i)
         fill_external(i)
 
+    # return E[1], OMM, P, ML, E
     return E[1]
 
 
