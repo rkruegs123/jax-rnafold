@@ -396,19 +396,15 @@ class StandardNNModel(NNModel):
         blp1 = RNA_ALPHA[blp1]
 
         if lup == 1 and rup == 1:
-            # int11_dg = jax_self.nn_params.params['int11'][bi, bj, bl, bk, bip1, bjm1]
             int11_dg = self.nn_params.params['int11'][pair1][pair2][bip1][bjm1]
             return boltz_onp(int11_dg)
         elif lup == 1 and rup == 2:
-            # int12_dg = jax_self.nn_params.params['int21'][bi, bj, bl, bk, bip1, blp1, bjm1]
             int12_dg = self.nn_params.params['int21'][pair1][pair2][bip1+blp1][bjm1]
             return boltz_onp(int12_dg)
         elif lup == 2 and rup == 1:
-            # int21_dg = jax_self.nn_params.params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1]
             int21_dg = self.nn_params.params['int21'][pair2][pair1][blp1+ bip1][bkm1]
             return boltz_onp(int21_dg)
         elif lup == 2 and rup == 2:
-            # int22_dg = jax_self.nn_params.params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1]
             int22_dg = self.nn_params.params['int22'][pair1][pair2][bip1+bkm1][blp1+bjm1]
             return boltz_onp(int22_dg)
 
@@ -421,7 +417,7 @@ class StandardNNModel(NNModel):
         init_dg = self._en_internal_init(lup + rup)
         asymmetry_dg = self._en_internal_asym(lup, rup) # Note: could also use the lookup table
 
-        mismatch_dg = mm_table[pair1][bip1+ bjm1]
+        mismatch_dg = mm_table[pair1][bip1+bjm1]
         mismatch_dg += mm_table[pair2][blp1+bkm1]
 
         int_dg = init_dg + asymmetry_dg + mismatch_dg

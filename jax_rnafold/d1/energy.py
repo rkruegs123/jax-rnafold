@@ -476,8 +476,35 @@ class StandardNNModel(NNModel):
         return boltz_onp(self._en_internal_asym(lup, rup))
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
-        en = self.en_internal_init(lup+rup)*self.en_internal_asym(lup, rup)*self.en_il_inner_mismatch(
-            bi, bj, bip1, bjm1)*self.en_il_outer_mismatch(bk, bl, bkm1, blp1)
+        pair1 = RNA_ALPHA[bi] + RNA_ALPHA[bj]
+        pair2 = RNA_ALPHA[bl] + RNA_ALPHA[bk]
+        bip1 = RNA_ALPHA[bip1]
+        bjm1 = RNA_ALPHA[bjm1]
+        bkm1 = RNA_ALPHA[bkm1]
+        blp1 = RNA_ALPHA[blp1]
+
+        if lup == 1 and rup == 1:
+            int11_dg = vienna_params['int11'][pair1][pair2][bip1][bjm1]
+            return boltz_onp(int11_dg)
+        elif lup == 1 and rup == 2:
+            int12_dg = vienna_params['int21'][pair1][pair2][bip1+blp1][bjm1]
+            return boltz_onp(int12_dg)
+        elif lup == 2 and rup == 1:
+            int21_dg = vienna_params['int21'][pair2][pair1][blp1+ bip1][bkm1]
+            return boltz_onp(int21_dg)
+        elif lup == 2 and rup == 2:
+            int22_dg = vienna_params['int22'][pair1][pair2][bip1+bkm1][blp1+bjm1]
+            return boltz_onp(int22_dg)
+
+        mm_table = vienna_params['mismatch_interior']
+        if lup == 1 or rup == 1:
+            mm_table = vienna_params['mismatch_interior_1n']
+        elif (lup == 2 and rup == 3) or (lup == 3 and rup == 2):
+            mm_table = vienna_params['mismatch_interior_23']
+
+        en = self.en_internal_init(lup+rup)*self.en_internal_asym(lup, rup) \
+             * boltz_onp(mm_table[pair1][bip1+bjm1]) \
+             * boltz_onp(mm_table[pair2][blp1+bkm1])
         return en
 
 
