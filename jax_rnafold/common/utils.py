@@ -32,30 +32,6 @@ def seq_to_one_hot(seq):
 HAIRPIN = 3
 
 
-special_hexaloops = ["ACAGUACU", "ACAGUGAU", "ACAGUGCU", "ACAGUGUU"]
-special_tetraloops = ["CAACGG", "CCAAGG", "CCACGG", "CCCAGG", "CCGAGG",
-                      "CCGCGG", "CCUAGG", "CCUCGG", "CUAAGG", "CUACGG",
-                      "CUCAGG", "CUCCGG", "CUGCGG", "CUUAGG", "CUUCGG",
-                      "CUUUGG"]
-special_triloops = ["CAACG", "GUUAC"]
-# SPECIAL_HAIRPINS = ["CAACG", "GUUAC"]  # FIXME: Not complete
-SPECIAL_HAIRPINS = special_hexaloops + special_tetraloops + special_triloops
-N_SPECIAL_HAIRPINS = len(SPECIAL_HAIRPINS)
-# array 1: length of each special hairpin
-SPECIAL_HAIRPIN_LENS = jnp.array(
-    [len(sp_hairpin) for sp_hairpin in SPECIAL_HAIRPINS]) # has size (N_SPECIAL_HAIRPINS,)
-SPECIAL_HAIRPIN_IDXS = list() # array 2: all characters concatenated
-SPECIAL_HAIRPIN_START_POS = list() # array 3: start position for each in array 2
-idx = 0
-for sp_hairpin in SPECIAL_HAIRPINS:
-    SPECIAL_HAIRPIN_START_POS.append(idx)
-    for nuc in sp_hairpin:
-        SPECIAL_HAIRPIN_IDXS.append(RNA_ALPHA.index(nuc))
-        idx += 1
-SPECIAL_HAIRPIN_IDXS = jnp.array(SPECIAL_HAIRPIN_IDXS)
-SPECIAL_HAIRPIN_START_POS = jnp.array(SPECIAL_HAIRPIN_START_POS) # has size (N_SPECIAL_HAIRPINS,)
-
-
 def get_bp_bases(bp):
     return (RNA_ALPHA.index(ALL_PAIRS[bp][0]), RNA_ALPHA.index(ALL_PAIRS[bp][1]))
 bp_bases = jnp.array([get_bp_bases(i) for i in range(NBPS)])

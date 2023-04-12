@@ -18,8 +18,6 @@ config.update("jax_enable_x64", True)
 
 from jax_rnafold.common.checkpoint import checkpoint_scan
 from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
-from jax_rnafold.common.utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
-    SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from jax_rnafold.common.utils import matching_to_db
 from jax_rnafold.common.utils import MAX_PRECOMPUTE
 from jax_rnafold.common import brute_force
