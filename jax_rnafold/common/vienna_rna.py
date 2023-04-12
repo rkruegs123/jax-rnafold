@@ -6,10 +6,20 @@ from jax_rnafold.common.utils import R, CELL_TEMP, boltz_onp
 
 
 # https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/examples_python.html
-def vienna_energy(seq, struct, dangle_mode=2):
+def vienna_energy(seq, struct, dangle_mode=2, params_path="misc/rna_turner2004.par"):
+    if params_path != "misc/rna_turner2004.par":
+        RNA.params_load(params_path)
+
+    # pdb.set_trace()
+    # fc.params_subst(new_params)
+    # fc.params_reset()
+    # RNA.params_load_DNA_Mathews1999()
+
+
     md = RNA.md()
     md.dangles = dangle_mode
     fc = RNA.fold_compound(seq, md)
+
 
     (mfe_struct, mfe) = fc.mfe()
     fc.exp_params_rescale(mfe)

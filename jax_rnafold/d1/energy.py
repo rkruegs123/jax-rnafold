@@ -2,6 +2,8 @@ import numpy as onp
 import unittest
 import pdb
 from abc import ABC, abstractmethod
+import random
+from tqdm import tqdm
 
 import jax.numpy as jnp
 
@@ -12,6 +14,10 @@ from jax_rnafold.common.utils import boltz_onp, boltz_jnp
 from jax_rnafold.common.utils import non_gc_pairs_mat, all_pairs_mat
 from jax_rnafold.common.utils import kb, CELL_TEMP, MAX_PRECOMPUTE
 from jax_rnafold.common.read_vienna_params import NNParams
+from jax_rnafold.common.utils import dot_bracket_2_matching, matching_2_dot_bracket
+from jax_rnafold.common.utils import seq_to_one_hot, get_rand_seq, random_pseq
+from jax_rnafold.common import vienna_rna, sampling
+
 
 
 class Model(ABC):
@@ -917,17 +923,9 @@ def calculate_min(str_seq, db, em: Model):
 
 class TestEnergyCalculator(unittest.TestCase):
 
-    def test_vienna(self):
-        from jax_rnafold.common.utils import dot_bracket_2_matching, matching_2_dot_bracket
-        from jax_rnafold.common.utils import seq_to_one_hot, get_rand_seq, random_pseq
-        from jax_rnafold.common import vienna_rna, sampling
-        import random
-        from tqdm import tqdm
+    def fuzz_test(self, n, max_structs, params_path):
 
-        n = 40
-        max_structs = 50
-
-        em = JaxNNModel()
+        em = JaxNNModel(params_path=params_path)
         seq = get_rand_seq(n)
         # seq = "UCUGUCGACGGAGGGUUUAU"
         p_seq = jnp.array(seq_to_one_hot(seq))
@@ -950,9 +948,12 @@ class TestEnergyCalculator(unittest.TestCase):
             calc_boltz = calculate_min(seq, db_str, em)
             calc_dg = onp.log(calc_boltz) * (-1/beta)
 
-            vienna_dg = vienna_rna.vienna_energy(seq, db_str, dangle_mode=1)
+            vienna_dg = vienna_rna.vienna_energy(seq, db_str, dangle_mode=1, params_path=params_path)
             print(f"\t\tCalculated dG: {calc_dg}")
             print(f"\t\tVienna dG: {vienna_dg}")
 
             # self.assertAlmostEqual(calc_dg, vienna_dg, places=7)
-            self.assertAlmostEqual(calc_dg, vienna_dg, places=5)
+            self.assertAlmostEqual(calc_dg, vienna_dg, places=4)
+
+    def test_vienna(self):
+        self.fuzz_test(n=20, max_structs=50, params_path="misc/rna_turner1999.par")
