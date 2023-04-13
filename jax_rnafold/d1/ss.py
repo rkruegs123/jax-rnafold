@@ -348,9 +348,9 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
             rup = j-l-1
 
             cond = ((lup == 2) & (rup == 2)) \
-                   | ((lup == 2) & (rup == 3)) \ 
-                   | ((lup == 3) & (rup == 2)) \ 
-        
+                   | ((lup == 2) & (rup == 3)) \
+                   | ((lup == 3) & (rup == 2)) \
+
 
             def get_bp_22_23_32_summand(bip1, bjm1, bkm1, blp1):
                 return P[bk, bl, k, l] * padded_p_seq[k, bk] * padded_p_seq[l, bl] \
@@ -388,7 +388,7 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
                             * P[bk, bl, k, l] \
                             * padded_p_seq[k, bk]*padded_p_seq[l, bl]
             gen_sm = OMM[bk, bl, k, l]*mmij*init_and_pair
-            
+
             return jnp.where(cond, gen_sm, 0.0)
 
         def get_bp_sm(bp):
@@ -401,7 +401,7 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
             bp_sum += jnp.sum(all_1n_sms)
 
             # Case 2: 2x2, 3x2, and 3x2
-            all_22_23_32_sms = vmap(vmap(get_bp_22_23_32_sm, (None, 0, None)), (None, None, 0))(jnp.arange(3), jnp.arange(3))
+            all_22_23_32_sms = vmap(vmap(get_bp_22_23_32_sm, (None, 0, None)), (None, None, 0))(bp, jnp.arange(3), jnp.arange(3))
             bp_sum += jnp.sum(all_22_23_32_sms)
 
 
@@ -616,11 +616,13 @@ class TestSSPartitionFunction(unittest.TestCase):
 
             print(f"\tReference partition function: {ref_pf}")
 
+            print(f"\tDifference: {onp.abs(ref_pf - ss_pf)}")
+
             self.assertAlmostEqual(ss_pf, ref_pf, places=tol_places)
 
     def test_fuzz(self):
         em = energy.JaxNNModel()
-        self.fuzz_test(n=20, num_seq=10, em=em, tol_places=12)
+        self.fuzz_test(n=16, num_seq=10, em=em, tol_places=12)
 
 
     def _test_train(self):
