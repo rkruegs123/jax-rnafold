@@ -35,6 +35,9 @@ from jax_rnafold.d1 import seq_pf as seq_pf_d1
 
 
 
+PARAMS_1999 = "misc/rna_turner1999.par"
+PARAMS_ETERNA = "misc/vrna185x.par"
+
 def design_seq_for_struct(db_str,
                           n_iter=50, lr=0.1, optimizer="rms-prop", mode="d2",
                           params_path="misc/rna_turner2004.par",
@@ -235,10 +238,11 @@ if __name__ == "__main__":
 
 
     mode = "d1"
-    test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
+    # test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
     # test_struct = "((.(..(.(....).(....).)..).(....).))" # multilooping fun
     # test_struct = "....((((((((.(....)).).).)))))...." # Zigzag-Semicircle
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10, mode=mode, params_path="misc/rna_turner1999.par")
+    test_struct = "......(.((((.((((....(...((((.(....).))))...)))))..((......((((....)))))).)))).)....................." # Shapes and Energy
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=1000, mode=mode, params_path=PARAMS_ETERNA)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]

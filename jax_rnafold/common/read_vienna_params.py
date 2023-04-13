@@ -378,6 +378,7 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
     chunks = list()
     next_chunk = list()
     INF = str(1e6)
+    DEF = str(-50)
     for l in param_lines:
         if l.isspace():
             # skip lines that are only whitespace
@@ -392,6 +393,7 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
             continue
 
         processed_line = processed_line.replace("INF", INF) # set inf to 1e6
+        processed_line = processed_line.replace("DEF", DEF) # set def to -50
         next_chunk.append(processed_line)
     chunks.append(next_chunk) # do the last one
 
