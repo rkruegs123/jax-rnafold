@@ -262,30 +262,51 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
             return bp_1n_sm
 
 
-        def get_bp_special_sm(bp, k, l, bk, bl, lup, rup):
-            def get_bp_special_summand(bip1, bjm1, bkm1, blp1):
+        def get_bp_22_23_32_sm(bp, k_offset, l_offset):
+            k = i + k_offset + 2
+            l = j - l_offset - 2
+            # k = k_offset + i + 2
+            # l = l_offset + k + 1
+            bk = bp[0]
+            bl = bp[1]
+            lup = k-i-1
+            rup = j-l-1
+
+            cond = ((lup == 2) & (rup == 2)) \
+                   | ((lup == 2) & (rup == 3)) \
+                   | ((lup == 3) & (rup == 2)) \
+
+
+            def get_bp_22_23_32_summand(bip1, bjm1, bkm1, blp1):
                 return P[bk, bl, k, l] * padded_p_seq[k, bk] * padded_p_seq[l, bl] \
                     * em.en_internal(bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup) \
                     * padded_p_seq[k-1, bkm1] * padded_p_seq[l+1, blp1] \
                     * padded_p_seq[i+1, bip1] * padded_p_seq[j-1, bjm1]
-            get_all_summands = vmap(get_bp_special_summand, (None, None, None, 0))
+            get_all_summands = vmap(get_bp_22_23_32_summand, (None, None, None, 0))
             get_all_summands = vmap(get_all_summands, (None, None, 0, None))
             get_all_summands = vmap(get_all_summands, (None, 0, None, None))
             get_all_summands = vmap(get_all_summands, (0, None, None, None))
             all_summands = get_all_summands(N4, N4, N4, N4)
-            return jnp.sum(all_summands)
+            return jnp.where(cond, jnp.sum(all_summands), 0.0)
+            # return jnp.sum(all_summands)
 
         def get_bp_general_sm(bp, k_offset, l_offset):
             k = k_offset + i + 2
-            l = l_offset + k + 1 # note: uses the k from above that includes k_offset. Order matters here.
+            # l = l_offset + k + 1 # note: uses the k from above that includes k_offset. Order matters here.
+            l = j - l_offset - 2
 
             bk = bp[0]
             bl = bp[1]
-            idx_cond = (k >= i+2) & (k < j-2) & (l >= k+1) & (l < j-1)
+            # idx_cond = (k >= i+2) & (k < j-2) & (l >= k+1) & (l < j-1)
+            idx_cond = (k < l)
             lup = k-i-1
             rup = j-l-1
-            n1_cond = (lup > 1) & (rup > 1)
-            cond = idx_cond & n1_cond
+            is_not_n1 = (lup > 1) & (rup > 1)
+            is_22_23_32 = ((lup == 2) & (rup == 2)) \
+                          | ((lup == 2) & (rup == 3)) \
+                          | ((lup == 3) & (rup == 2))
+
+            cond = idx_cond & is_not_n1 & ~is_22_23_32
 
             init_and_pair = em.en_internal_init(lup+rup) \
                             * em.en_internal_asym(lup, rup) \
@@ -293,26 +314,22 @@ def get_ss_partition_fn(em : energy.NNModel, seq_len, max_loop=MAX_LOOP):
                             * padded_p_seq[k, bk]*padded_p_seq[l, bl]
             gen_sm = OMM[bk, bl, k, l]*mmij*init_and_pair
 
-            is_special = ((lup == 2) & (rup == 2)) \
-                         | ((lup == 2) & (rup == 3)) \
-                         | ((lup == 3) & (rup == 2))
-
-            return jnp.where(cond,
-                             jnp.where(is_special,
-                                       get_bp_special_sm(bp, k, l, bk, bl, lup, rup),
-                                       gen_sm),
-                             0.0)
+            return jnp.where(cond, gen_sm, 0.0)
 
         def get_bp_sm(bp):
             bk = bp[0]
             bl = bp[1]
             bp_sum = 0.0
 
+            # Case 1: nx1 and 1xn
             all_1n_sms = vmap(vmap(get_bp_1n_sm, (None, 0, None)), (None, None, 0))(bp, N4, N4)
             bp_sum += jnp.sum(all_1n_sms)
 
-            # ks = jnp.arange(n+2) # FIXME: is this correct?
-            # ls = jnp.arange(n+2) # FIXME: is this correct?
+            # Case 2: 2x2, 3x2, and 3x2
+            all_22_23_32_sms = vmap(vmap(get_bp_22_23_32_sm, (None, 0, None)), (None, None, 0))(bp, jnp.arange(3), jnp.arange(3))
+            bp_sum += jnp.sum(all_22_23_32_sms)
+
+            # Case 3: All others
             k_offsets = jnp.arange(two_loop_length)
             l_offsets = jnp.arange(two_loop_length)
             all_gen_sms = vmap(vmap(get_bp_general_sm, (None, 0, None)), (None, None, 0))(bp, k_offsets, l_offsets)
@@ -500,7 +517,7 @@ class TestPartitionFunction(unittest.TestCase):
 
     def _all_1_test(self, n):
         em = energy.All1Model()
-        ss_partition_fn = get_ss_partition_fn(em)
+        ss_partition_fn = get_ss_partition_fn(em, seq_len=n)
 
         p_seq = random_pseq(n)
         nuss = nus.ss_partition(p_seq, en_pair=nus.en_pair_1)
@@ -510,7 +527,7 @@ class TestPartitionFunction(unittest.TestCase):
 
     def _brute_model_test(self, em, n):
         p_seq = random_pseq(n)
-        ss_partition_fn = get_ss_partition_fn(em)
+        ss_partition_fn = get_ss_partition_fn(em, seq_len=n)
         vien = ss_partition_fn(p_seq)
         brute = brute_force.ss_partition(p_seq, energy_fn=lambda seq, match: energy.calculate(
             seq, matching_to_db(match), em))
@@ -556,13 +573,13 @@ class TestPartitionFunction(unittest.TestCase):
         for n in range(1, 10):
             self._random_test(n)
 
-    def test_nn_to_8(self):
+    def test_nn_to_16(self):
 
         em = energy.JaxNNModel()
 
         n_seq = 3
         # for n in range(10, 20): # next do 29, then 30, then 31, 32
-        for n in range(1, 8):
+        for n in range(1, 17):
             ss_partition_fn = get_ss_partition_fn(em, n)
 
             for _ in range(n_seq):
