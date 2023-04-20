@@ -482,7 +482,7 @@ class StandardNNModel(NNModel):
         return boltz_onp(closing_pair_dg)
 
 class JaxNNModel(Model):
-    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,

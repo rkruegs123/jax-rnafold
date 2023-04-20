@@ -35,6 +35,9 @@ from jax_rnafold.d1 import seq_pf as seq_pf_d1
 
 
 
+PARAMS_1999 = "misc/rna_turner1999.par"
+PARAMS_ETERNA = "misc/vrna185x.par"
+
 def design_seq_for_struct(db_str,
                           n_iter=50, lr=0.1, optimizer="rms-prop", mode="d2",
                           params_path="misc/rna_turner2004.par",
@@ -64,8 +67,8 @@ def design_seq_for_struct(db_str,
 
         seq_pf = seq_pf_fn(p_seq)
         ss_pf = ss_pf_fn(p_seq)
-        return -jnp.log(seq_pf / ss_pf)
-    log_prob_grad = value_and_grad(neg_log_prob_fn)
+        return -jnp.log(seq_pf / ss_pf), (seq_pf, ss_pf)
+    log_prob_grad = value_and_grad(neg_log_prob_fn, has_aux=True)
     log_prob_grad = jit(log_prob_grad)
 
 
@@ -88,11 +91,15 @@ def design_seq_for_struct(db_str,
     iter_params = [params] # will have n_iter+1 elements
     iter_losses = list() # will have n_iter+1 elements
     iter_grads = list() # will have n_iter elements -- not worth it to get the grad of the final params
+    curr_pr_seq = jax.nn.softmax(params['seq_logits'])
+    curr_maxs = jnp.argmax(curr_pr_seq, axis=1)
+    curr_seq = ''.join([RNA_ALPHA[idx] for idx in curr_maxs])
     for i, i_key, i_temp in zip(range(n_iter), iter_keys, iter_temps):
     # for i in range(n_iter):
         start = time.time()
 
-        loss, _grad = log_prob_grad(params, i_key, i_temp)
+        (loss, (seq_pf, ss_pf)), _grad = log_prob_grad(params, i_key, i_temp)
+        # print(_grad)
         updates, opt_state = optimizer.update(_grad, opt_state)
         params = optax.apply_updates(params, updates)
 
@@ -106,12 +113,17 @@ def design_seq_for_struct(db_str,
 
         if i % print_every == 0:
             # print(f"{i}: {loss}    (temp={temp})")
-            print(f"{i}: {loss}")
+            print(f"{i}: Loss={loss}, Seq PF={onp.round(seq_pf, 2)}, SS PF={onp.round(ss_pf, 2)}")
         if i % 10 == 0:
+            prev_seq = curr_seq
             curr_pr_seq = jax.nn.softmax(params['seq_logits'])
             curr_maxs = jnp.argmax(curr_pr_seq, axis=1)
             curr_seq = ''.join([RNA_ALPHA[idx] for idx in curr_maxs])
-            print(f"Current argmax sequence: {curr_seq}")
+            curr_seq_scaled = ''.join([curr_seq[c_idx].lower() if curr_pr_seq[c_idx, curr_maxs[c_idx]] < 0.5 else curr_seq[c_idx] for c_idx in range(len(curr_seq))])
+            print(f"Current argmax sequence:\t{curr_seq_scaled}")
+
+            diff_str = ''.join(['-' if c1 == c2 else c2 for c1, c2 in zip(prev_seq, curr_seq)])
+            print(f"Difference:\t\t\t{diff_str}")
 
     final_loss, _ = log_prob_grad(params, None, None) # Won't work with gumbel trick turned on
     iter_losses.append(final_loss)
@@ -234,11 +246,23 @@ if __name__ == "__main__":
     # pdb.set_trace()
 
 
-    mode = "d1"
-    test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
+    mode = "d2"
+    # test_struct = "..((((((((.....))))((((.....)))))))).." # tripod
     # test_struct = "((.(..(.(....).(....).)..).(....).))" # multilooping fun
     # test_struct = "....((((((((.(....)).).).)))))...." # Zigzag-Semicircle
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=10, mode=mode, params_path="misc/rna_turner1999.par")
+    # test_struct = "......(.((((.((((....(...((((.(....).))))...)))))..((......((((....)))))).)))).)....................." # Shapes and Energy
+    # test_struct = "...((((((....))))))(((((....)))))((((((....))))))(((((....)))))((((((....))))))(((((....)))))(((((....)))))((((((....)))))).(((((....)))))((((((....))))))(((((....)))))((((((....))))))(((((....)))))((((((....))))))"
+
+    # test_struct = ".....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..))))))))....." # full
+    # test_struct = ".....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..))))))))....." # 2/5
+    # test_struct = ".....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..))))))))..." # 4/5
+    # test_struct = ".....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..)))))))).....((((((((..((((....))))..((((....))))..((((....))))..((((....))))..))))))))....." # 3/5
+
+    # test_struct = "((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((...))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+    test_struct = "(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((...)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
+    
+
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=1000, mode=mode, params_path=PARAMS_ETERNA)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]
