@@ -12,7 +12,7 @@ from jax_rnafold.common.utils import structure_tree
 from jax_rnafold.common.energy_hash import float_hash
 from jax_rnafold.common.utils import boltz_onp, boltz_jnp
 from jax_rnafold.common.utils import non_gc_pairs_mat, all_pairs_mat
-from jax_rnafold.common.utils import kb, CELL_TEMP, MAX_PRECOMPUTE
+from jax_rnafold.common.utils import kb, CELL_TEMP, MAX_PRECOMPUTE, TURNER_2004, TURNER_1999
 from jax_rnafold.common.read_vienna_params import NNParams
 from jax_rnafold.common.utils import dot_bracket_2_matching, matching_2_dot_bracket
 from jax_rnafold.common.utils import seq_to_one_hot, get_rand_seq, random_pseq
@@ -327,7 +327,7 @@ class NNModel(Model):
 
 class StandardNNModel(NNModel):
 
-    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=False, log=False,
@@ -517,7 +517,7 @@ class StandardNNModel(NNModel):
 
 class JaxNNModel(NNModel):
 
-    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,
@@ -956,4 +956,4 @@ class TestEnergyCalculator(unittest.TestCase):
             self.assertAlmostEqual(calc_dg, vienna_dg, places=4)
 
     def test_vienna(self):
-        self.fuzz_test(n=20, max_structs=50, params_path="misc/rna_turner1999.par")
+        self.fuzz_test(n=20, max_structs=50, params_path=TURNER_1999)

@@ -7,7 +7,7 @@ from copy import deepcopy
 import jax.numpy as jnp
 
 from jax_rnafold.common.utils import NON_GC_PAIRS, RNA_ALPHA, RNA_ALPHA_IDX
-from jax_rnafold.common.utils import CELL_TEMP, MAX_LOOP
+from jax_rnafold.common.utils import CELL_TEMP, MAX_LOOP, TURNER_2004, TURNER_1999, ETERNA_185x
 from jax_rnafold.common.utils import all_pairs_mat, MAX_PRECOMPUTE
 
 from jax.config import config
@@ -369,7 +369,7 @@ def postprocess_data(data, max_precompute):
     return postprocessed_data
 
 
-def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, postprocess=True, log=False):
+def read(param_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE, postprocess=True, log=False):
     with open(param_path, 'r') as f:
         # param_text = f.read()
         param_lines = f.readlines()
@@ -498,7 +498,7 @@ def read(param_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE, po
 
 
 class NNParams:
-    def __init__(self, params_path="misc/rna_turner2004.par",
+    def __init__(self, params_path=TURNER_2004,
                  max_precompute=MAX_PRECOMPUTE,
                  postprocess=True, log=False,
                  save_sp_hairpins_jax=False
@@ -557,17 +557,6 @@ class NNParams:
 
 
 if __name__ == "__main__":
-    params_dir = "misc"
-    params_fname = "rna_turner2004.par"
-    params_path = f"{params_dir}/{params_fname}"
-    params_2004 = read(params_path)
-
-    params_fname = "rna_turner1999.par"
-    params_path = f"{params_dir}/{params_fname}"
-    params_1999 = read(params_path)
-
-    pdb.set_trace()
-
-    params_fname = "vrna185x.par"
-    params_path = f"{params_dir}/{params_fname}"
-    params_vrna185x = read(params_path)
+    params_2004 = read(TURNER_2004)
+    params_1999 = read(TURNER_1999)
+    params_vrna185x = read(ETERNA_185x)

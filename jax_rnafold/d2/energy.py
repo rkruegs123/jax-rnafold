@@ -11,7 +11,7 @@ config.update("jax_enable_x64", True)
 from jax_rnafold.common.utils import RNA_ALPHA, INVALID_BASE, RNA_ALPHA_IDX
 from jax_rnafold.common.utils import VALID_PAIRS
 from jax_rnafold.common.utils import boltz_onp, boltz_jnp
-from jax_rnafold.common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP, MAX_PRECOMPUTE
+from jax_rnafold.common.utils import MAX_LOOP, NON_GC_PAIRS, kb, CELL_TEMP, MAX_PRECOMPUTE, TURNER_2004
 from jax_rnafold.common.utils import all_pairs_mat, non_gc_pairs_mat
 from jax_rnafold.common import utils
 from jax_rnafold.common import read_vienna_params
@@ -275,7 +275,7 @@ class NNModel(Model):
     nn_params: NNParams
 
 class StandardNNModel(NNModel):
-    def __init__(self, params_path, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=False, log=False,
@@ -482,7 +482,7 @@ class StandardNNModel(NNModel):
         return boltz_onp(closing_pair_dg)
 
 class JaxNNModel(Model):
-    def __init__(self, params_path="misc/rna_turner2004.par", max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,

@@ -162,6 +162,11 @@ def structure_tree(db):
     return ch, right
 
 
+# Parameter paths
+TURNER_2004 = "misc/rna_turner2004.par"
+TURNER_1999 = "misc/rna_turner1999.par"
+ETERNA_185x = "misc/vrna185x.par"
+
 
 if __name__ == "__main__":
     from jax import vmap

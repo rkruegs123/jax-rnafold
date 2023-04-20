@@ -2,12 +2,12 @@ import pdb
 import numpy as np
 import RNA
 
-from jax_rnafold.common.utils import R, CELL_TEMP, boltz_onp
+from jax_rnafold.common.utils import R, CELL_TEMP, boltz_onp, TURNER_2004, TURNER_1999
 
 
 # https://www.tbi.univie.ac.at/RNA/ViennaRNA/doc/html/examples_python.html
-def vienna_energy(seq, struct, dangle_mode=2, params_path="misc/rna_turner2004.par"):
-    if params_path != "misc/rna_turner2004.par":
+def vienna_energy(seq, struct, dangle_mode=2, params_path=TURNER_2004):
+    if params_path != TURNER_2004:
         RNA.params_load(params_path)
 
     # pdb.set_trace()

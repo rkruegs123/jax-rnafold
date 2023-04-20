@@ -19,7 +19,7 @@ config.update("jax_enable_x64", True)
 from jax_rnafold.common.checkpoint import checkpoint_scan
 from jax_rnafold.common.utils import bp_bases, HAIRPIN, N4, INVALID_BASE, RNA_ALPHA
 from jax_rnafold.common.utils import matching_to_db
-from jax_rnafold.common.utils import MAX_PRECOMPUTE
+from jax_rnafold.common.utils import MAX_PRECOMPUTE, TURNER_2004, TURNER_1999, ETERNA_185x
 from jax_rnafold.common import brute_force
 import jax_rnafold.common.nussinov as nus
 from jax_rnafold.common import vienna_rna
@@ -35,12 +35,9 @@ from jax_rnafold.d1 import seq_pf as seq_pf_d1
 
 
 
-PARAMS_1999 = "misc/rna_turner1999.par"
-PARAMS_ETERNA = "misc/vrna185x.par"
-
 def design_seq_for_struct(db_str,
                           n_iter=50, lr=0.1, optimizer="rms-prop", mode="d2",
-                          params_path="misc/rna_turner2004.par",
+                          params_path=TURNER_2004,
                           print_every=1):
 
 
@@ -262,7 +259,7 @@ if __name__ == "__main__":
     test_struct = "(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((...)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))"
     
 
-    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=1000, mode=mode, params_path=PARAMS_ETERNA)
+    opt_params, all_times, _, _, _ = design_seq_for_struct(test_struct, n_iter=1000, mode=mode, params_path=ETERNA_185x)
     opt_pr_seq = jax.nn.softmax(opt_params['seq_logits'])
     maxs = jnp.argmax(opt_pr_seq, axis=1)
     nucs = [RNA_ALPHA[idx] for idx in maxs]
