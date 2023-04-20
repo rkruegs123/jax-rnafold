@@ -22,6 +22,8 @@ from jax_rnafold.common.read_vienna_params import NNParams
 
 class Model(ABC):
     special_hairpins: list[str]
+    temp: float
+    beta: float
 
     @abstractmethod
     def en_ext_branch(self, bim1, bi, bj, bjp1):
@@ -76,10 +78,12 @@ class Model(ABC):
         return en
 
 
-class All1Model(Model):
+class All1Model(Model, temp=CELL_TEMP):
     def __init__(self):
         # self.special_hairpins = list()
         self.special_hairpins = ["AAA", "AAAA", "AAAAAA"]
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
 
     def en_ext_branch(self, bim1, bi, bj, bjp1):
         return 1
@@ -115,11 +119,13 @@ class All1Model(Model):
         return 1
 
 
-class RandomModel(Model):
+class RandomModel(Model, temp=CELL_TEMP):
     def __init__(self, seed=1):
         self.seed = seed
         # self.special_hairpins = list()
         self.special_hairpins = ["AAA", "AAAA", "AAAAAA"]
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
 
     def en_ext_branch(self, bim1, bi, bj, bjp1):
         return float_hash(self.seed, bim1, bi, bj, bjp1, 1)
@@ -275,11 +281,15 @@ class NNModel(Model):
     nn_params: NNParams
 
 class StandardNNModel(NNModel):
-    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, 
+                 max_precompute=MAX_PRECOMPUTE, temp=CELL_TEMP):
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
+        
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=False, log=False,
-                                  save_sp_hairpins_jax=False)
+                                  save_sp_hairpins_jax=False, temp=self.temp)
         self.special_hairpins = self.nn_params.special_hairpins
 
     def score_stem_extloop_multiloop(self, bi, bj, b_dangle5, b_dangle3, mm_table):
@@ -304,12 +314,12 @@ class StandardNNModel(NNModel):
         en = self.nn_params.params['stack'][pair1][pair2] # swap bk and bl
         return en
     def en_stack(self, bi, bj, bk, bl):
-        return boltz_onp(self._en_stack(bi, bj, bk, bl))
+        return boltz_onp(self._en_stack(bi, bj, bk, bl), t=self.temp)
 
 
     def en_hairpin_special(self, id):
         en = self.nn_params.special_hairpin_energies[id]
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def get_max_loop_correction(self, u):
         return onp.floor(1.07856 * onp.log(u/MAX_LOOP) * 100) / 100
@@ -334,7 +344,7 @@ class StandardNNModel(NNModel):
             mismatch = self.nn_params.params['mismatch_hairpin'][pair][bip1+bjm1]
             en = initiation + mismatch
 
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
 
     def en_ext_branch(self, bim1, bi, bj, bjp1):
@@ -347,7 +357,7 @@ class StandardNNModel(NNModel):
         b_dangle3 = bjp1
         en = self.score_stem_extloop_multiloop(bi, bj, b_dangle5, b_dangle3,
                                                self.nn_params.params['mismatch_exterior'])
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
 
     # Helper that returns the energy rather than the boltzmann weight
@@ -358,7 +368,7 @@ class StandardNNModel(NNModel):
         else:
             return self.nn_params.params['interior'][MAX_LOOP] + self.get_max_loop_correction(sz)
     def en_internal_init(self, sz):
-        return boltz_onp(self._en_internal_init(sz))
+        return boltz_onp(self._en_internal_init(sz), t=self.temp)
 
     # Helper that returns the energy rather than the boltzmann weight
     def _en_internal_asym(self, lup, rup):
@@ -367,7 +377,7 @@ class StandardNNModel(NNModel):
         return onp.min([self.nn_params.params['asymmetry_max'], dg])
 
     def en_internal_asym(self, lup, rup):
-        return boltz_onp(self._en_internal_asym(lup, rup))
+        return boltz_onp(self._en_internal_asym(lup, rup), t=self.temp)
 
 
     # Note: neither `en_il_inner_mismatch` or `en_il_outer_mismatch` will be used with the NNModel,
@@ -378,13 +388,13 @@ class StandardNNModel(NNModel):
         pair = RNA_ALPHA[bi] + RNA_ALPHA[bj]
         bip1 = RNA_ALPHA[bip1]
         bjm1 = RNA_ALPHA[bjm1]
-        return boltz_onp(self.nn_params.params['mismatch_interior'][pair][bip1+bjm1])
+        return boltz_onp(self.nn_params.params['mismatch_interior'][pair][bip1+bjm1], t=self.temp)
 
     def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
         pair_rev = RNA_ALPHA[bj] + RNA_ALPHA[bi]
         bim1 = RNA_ALPHA[bim1]
         bjp1 = RNA_ALPHA[bjp1]
-        return boltz_onp(self.nn_params.params['mismatch_interior'][pair_rev][bjp1+bim1])
+        return boltz_onp(self.nn_params.params['mismatch_interior'][pair_rev][bjp1+bim1], t=self.temp)
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
 
@@ -397,16 +407,16 @@ class StandardNNModel(NNModel):
 
         if lup == 1 and rup == 1:
             int11_dg = self.nn_params.params['int11'][pair1][pair2][bip1][bjm1]
-            return boltz_onp(int11_dg)
+            return boltz_onp(int11_dg, t=self.temp)
         elif lup == 1 and rup == 2:
             int12_dg = self.nn_params.params['int21'][pair1][pair2][bip1+blp1][bjm1]
-            return boltz_onp(int12_dg)
+            return boltz_onp(int12_dg, t=self.temp)
         elif lup == 2 and rup == 1:
             int21_dg = self.nn_params.params['int21'][pair2][pair1][blp1+ bip1][bkm1]
-            return boltz_onp(int21_dg)
+            return boltz_onp(int21_dg, t=self.temp)
         elif lup == 2 and rup == 2:
             int22_dg = self.nn_params.params['int22'][pair1][pair2][bip1+bkm1][blp1+bjm1]
-            return boltz_onp(int22_dg)
+            return boltz_onp(int22_dg, t=self.temp)
 
         mm_table = self.nn_params.params['mismatch_interior']
         if lup == 1 or rup == 1:
@@ -421,7 +431,7 @@ class StandardNNModel(NNModel):
         mismatch_dg += mm_table[pair2][blp1+bkm1]
 
         int_dg = init_dg + asymmetry_dg + mismatch_dg
-        return boltz_onp(int_dg)
+        return boltz_onp(int_dg, t=self.temp)
 
 
     def bulge_initiation(self, u):
@@ -443,7 +453,7 @@ class StandardNNModel(NNModel):
             if pair2 in NON_GC_PAIRS:
                 bulge_dg += self.nn_params.params['non_gc_closing_penalty']
 
-        return boltz_onp(bulge_dg)
+        return boltz_onp(bulge_dg, t=self.temp)
 
 
     def en_multi_branch(self, bim1, bi, bk, bkp1):
@@ -459,7 +469,7 @@ class StandardNNModel(NNModel):
 
         dg += self.score_stem_extloop_multiloop(bi, bk, b_dangle5, b_dangle3,
                                                 self.nn_params.params['mismatch_multi'])
-        return boltz_onp(dg)
+        return boltz_onp(dg, t=self.temp)
 
 
     def en_multi_closing(self, bi, bip1, bjm1, bj):
@@ -479,27 +489,31 @@ class StandardNNModel(NNModel):
         closing_pair_dg += self.score_stem_extloop_multiloop(bj, bi, b_dangle5, b_dangle3,
                                                              self.nn_params.params['mismatch_multi'])
 
-        return boltz_onp(closing_pair_dg)
+        return boltz_onp(closing_pair_dg, t=self.temp)
 
 class JaxNNModel(Model):
-    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, 
+                 max_precompute=MAX_PRECOMPUTE, temp=CELL_TEMP):
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
+        
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,
-                                  save_sp_hairpins_jax=True)
+                                  save_sp_hairpins_jax=True, temp=self.temp)
         self.special_hairpins = self.nn_params.special_hairpins
 
     def _en_stack(self, bi, bj, bk, bl):
         en = self.nn_params.params['stack'][bi, bj, bl, bk] # swap bk and bl
         return en
     def en_stack(self, bi, bj, bk, bl):
-        return boltz_jnp(self._en_stack(bi, bj, bk, bl))
+        return boltz_jnp(self._en_stack(bi, bj, bk, bl), t=self.temp)
 
     def en_il_inner_mismatch(self, bi, bj, bip1, bjm1):
-        return boltz_jnp(self.nn_params.params['mismatch_interior'][bi, bj, bip1, bjm1])
+        return boltz_jnp(self.nn_params.params['mismatch_interior'][bi, bj, bip1, bjm1], t=self.temp)
 
     def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
-        return boltz_jnp(self.nn_params.params['mismatch_interior'][bj, bi, bjp1, bim1])
+        return boltz_jnp(self.nn_params.params['mismatch_interior'][bj, bi, bjp1, bim1], t=self.temp)
 
     def bulge_initiation(self, u):
         return self.nn_params.params['bulge'][u] # Note: u must be less than MAX_PRECOMPUTE
@@ -508,7 +522,7 @@ class JaxNNModel(Model):
     def _en_internal_init(self, sz):
         return self.nn_params.params['interior'][sz] # Note: sz must be less than MAX_PRECOMPUTE
     def en_internal_init(self, sz):
-        return boltz_jnp(self._en_internal_init(sz))
+        return boltz_jnp(self._en_internal_init(sz), t=self.temp)
 
     def en_hairpin_not_special(self, bi, bj, bip1, bjm1, nunpaired):
 
@@ -521,11 +535,11 @@ class JaxNNModel(Model):
         non_gc_closing_penalty = non_gc_pairs_mat[bi, bj] * self.nn_params.params['non_gc_closing_penalty']
 
         en = jnp.where(nunpaired == 3, initiation + non_gc_closing_penalty, initiation + mismatch)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_hairpin_special(self, id):
         en = self.nn_params.special_hairpin_energies[id]
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_bulge(self, bi, bj, bk, bl, nunpaired):
         bulge_dg = self.bulge_initiation(nunpaired)
@@ -538,7 +552,7 @@ class JaxNNModel(Model):
         gc_penalty_dg += non_gc_pairs_mat[bl, bk] * self.nn_params.params['non_gc_closing_penalty']
 
         bulge_dg += jnp.where(nunpaired == 1, stack_dg, gc_penalty_dg)
-        return boltz_jnp(bulge_dg)
+        return boltz_jnp(bulge_dg, t=self.temp)
 
     def score_stem_extloop_multiloop(self, bi, bj, b_dangle5, b_dangle3, mm_table):
         dg = 0
@@ -563,7 +577,7 @@ class JaxNNModel(Model):
         b_dangle3 = bjp1
         en = self.score_stem_extloop_multiloop(bi, bj, b_dangle5, b_dangle3,
                                                self.nn_params.params['mismatch_exterior'])
-        return all_pairs_mat[bi, bj] * boltz_jnp(en)
+        return all_pairs_mat[bi, bj] * boltz_jnp(en, t=self.temp)
 
 
 
@@ -591,7 +605,7 @@ class JaxNNModel(Model):
                                            jnp.where((lup == 2) & (rup == 2),
                                                      self.nn_params.params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1],
                                                      general_int_dg))))
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_multi_closing(self, bi, bip1, bjm1, bj):
         closing_pair_dg = self.nn_params.params['ml_initiation']
@@ -605,7 +619,7 @@ class JaxNNModel(Model):
         closing_pair_dg += self.score_stem_extloop_multiloop(bj, bi, b_dangle5, b_dangle3,
                                                              self.nn_params.params['mismatch_multi'])
 
-        return all_pairs_mat[bi, bj] * boltz_jnp(closing_pair_dg)
+        return all_pairs_mat[bi, bj] * boltz_jnp(closing_pair_dg, t=self.temp)
 
     def en_multi_branch(self, bim1, bi, bk, bkp1):
         dg = self.nn_params.params['ml_branch']
@@ -616,7 +630,7 @@ class JaxNNModel(Model):
         dg += self.score_stem_extloop_multiloop(bi, bk, b_dangle5, b_dangle3,
                                                 self.nn_params.params['mismatch_multi'])
 
-        return all_pairs_mat[bi, bk] * boltz_jnp(dg)
+        return all_pairs_mat[bi, bk] * boltz_jnp(dg, t=self.temp)
 
 
     # Helper that returns the energy rather than the boltzmann weight
@@ -624,7 +638,7 @@ class JaxNNModel(Model):
         return self.nn_params.params['asymmetry_matrix'][lup, rup]
 
     def en_internal_asym(self, lup, rup):
-        return boltz_jnp(self._en_internal_asym(lup, rup))
+        return boltz_jnp(self._en_internal_asym(lup, rup), t=self.temp)
 
 
 
@@ -697,8 +711,6 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
     from common import sampling
 
 
-    beta = 1 / (kb*CELL_TEMP)
-
     seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
 
     failed_cases = list()
@@ -726,7 +738,7 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
             dg_calc = calculate(seq, db_str, em)
 
             dg_calc = calculate(seq, db_str, em)
-            dg = onp.log(dg_calc) / -beta
+            dg = onp.log(dg_calc) / -em.beta
             all_dgs.append(dg)
             print(f"\t\tComputed dG: {dg}")
 
@@ -751,11 +763,9 @@ def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
 def test(seq, struct, em):
     from common import vienna_rna
 
-    beta = 1 / (kb*CELL_TEMP)
-
     dg_calc = calculate(seq, struct, em)
     dg_vienna = vienna_rna.vienna_energy(seq, struct)
-    print(f"Ours: {onp.log(dg_calc) / -beta}")
+    print(f"Ours: {onp.log(dg_calc) / -em.beta}")
     print(f"Vienna: {dg_vienna}")
 
 if __name__ == '__main__':

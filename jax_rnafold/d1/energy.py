@@ -22,6 +22,8 @@ from jax_rnafold.common import vienna_rna, sampling
 
 class Model(ABC):
     special_hairpins: list[str]
+    temp: float
+    beta: float
 
     @abstractmethod
     def en_ext_branch(self, bi, bj):
@@ -100,9 +102,11 @@ class Model(ABC):
 
 
 class All0Model(Model):
-    def __init__(self):
+    def __init__(self, temp=CELL_TEMP):
         # self.special_hairpins = list()
         self.special_hairpins = ["AAA", "AAAA", "AAAAAA"]
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
 
     def en_ext_branch(self, bi, bj):
         return 0
@@ -157,8 +161,10 @@ class All0Model(Model):
 
 
 class All1Model(Model):
-    def __init__(self):
+    def __init__(self, temp=CELL_TEMP):
         self.special_hairpins = list()
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
 
     def en_ext_branch(self, bi, bj):
         return 1
@@ -213,9 +219,12 @@ class All1Model(Model):
 
 
 class RandomModel(Model):
-    def __init__(self, seed=1):
+    def __init__(self, temp=CELL_TEMP, seed=1):
         self.seed = seed
         self.special_hairpins = list()
+
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
 
     def hash(self, *args):
         return float_hash(self.seed, *args)
@@ -327,11 +336,15 @@ class NNModel(Model):
 
 class StandardNNModel(NNModel):
 
-    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, 
+                 max_precompute=MAX_PRECOMPUTE, temp=CELL_TEMP):
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
+        
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=False, log=False,
-                                  save_sp_hairpins_jax=False)
+                                  save_sp_hairpins_jax=False, temp=self.temp)
         self.special_hairpins = self.nn_params.special_hairpins
 
     def en_ext_branch(self, bi, bj):
@@ -342,7 +355,7 @@ class StandardNNModel(NNModel):
         en = 0.0
         if pair in NON_GC_PAIRS:
             en += self.nn_params.params['non_gc_closing_penalty']
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_multi_branch(self, bi, bk):
         pair = RNA_ALPHA[bi] + RNA_ALPHA[bk]
@@ -353,7 +366,7 @@ class StandardNNModel(NNModel):
         if pair in NON_GC_PAIRS:
             dg += self.nn_params.params['non_gc_closing_penalty']
 
-        return boltz_onp(dg)
+        return boltz_onp(dg, t=self.temp)
 
     def en_5dangle(self, bim1, bi, bj):
         b_dangle5 = bim1
@@ -364,7 +377,7 @@ class StandardNNModel(NNModel):
             en = self.nn_params.params['dangle5'][pair][RNA_ALPHA[b_dangle5]]
         else:
             en = 0.0
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_5dangle_inner(self, bi, bjm1, bj):
         return self.en_5dangle(bjm1, bj, bi)
@@ -378,7 +391,7 @@ class StandardNNModel(NNModel):
             en = self.nn_params.params['dangle3'][pair][RNA_ALPHA[b_dangle3]]
         else:
             en = 0.0
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_3dangle_inner(self, bi, bip1, bj):
         return self.en_3dangle(bj, bi, bip1)
@@ -400,18 +413,18 @@ class StandardNNModel(NNModel):
 
     def en_term_mismatch(self, bim1, bi, bj, bjp1):
         en = self._en_term_mismatch(bim1, bi, bj, bjp1)
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_term_mismatch_inner(self, bi, bip1, bjm1, bj):
         en = self._en_term_mismatch(bjm1, bj, bi, bip1)
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_multi_closing(self, bi, bj):
         closing_pair_dg = self.nn_params.params['ml_initiation']
         closing_pair_dg += self.nn_params.params['ml_branch']
         closing_pair_dg += non_gc_pairs_mat[bi, bj] * self.nn_params.params['non_gc_closing_penalty']
 
-        return all_pairs_mat[bi, bj] * boltz_onp(closing_pair_dg)
+        return all_pairs_mat[bi, bj] * boltz_onp(closing_pair_dg, t=self.temp)
 
     def en_hairpin_not_special(self, bi, bj, bip1, bjm1, nunpaired):
         # Note that vienna ignores the all-C case
@@ -427,12 +440,12 @@ class StandardNNModel(NNModel):
             mismatch = self.nn_params.params['mismatch_hairpin'][pair][RNA_ALPHA[bip1]+RNA_ALPHA[bjm1]]
             en = initiation + mismatch
 
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_hairpin_special(self, id):
         # id is the index into self.special_hairpins
         en = self.nn_params.special_hairpin_energies[id]
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def _en_stack(self, bi, bj, bk, bl):
         pair1 = RNA_ALPHA[bi] + RNA_ALPHA[bj]
@@ -440,7 +453,7 @@ class StandardNNModel(NNModel):
         en = self.nn_params.params['stack'][pair1][pair2] # swap bk and bl
         return en
     def en_stack(self, bi, bj, bk, bl):
-        return boltz_onp(self._en_stack(bi, bj, bk, bl))
+        return boltz_onp(self._en_stack(bi, bj, bk, bl), t=self.temp)
 
     def bulge_initiation(self, u):
         return self.nn_params.params['bulge'][u] # FIXME: check against MAX_LOOP
@@ -458,28 +471,28 @@ class StandardNNModel(NNModel):
             if pair2 in NON_GC_PAIRS:
                 bulge_dg += self.nn_params.params['non_gc_closing_penalty']
 
-        return boltz_onp(bulge_dg)
+        return boltz_onp(bulge_dg, t=self.temp)
 
     def en_il_inner_mismatch(self, bi, bj, bip1, bjm1):
         pair = RNA_ALPHA[bi] + RNA_ALPHA[bj]
         en = self.nn_params.params['mismatch_interior'][pair][RNA_ALPHA[bip1] + RNA_ALPHA[bjm1]]
-        return boltz_onp(en)
+        return boltz_onp(en, t=self.temp)
 
     def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
         pair = RNA_ALPHA[bj] + RNA_ALPHA[bi]
-        return boltz_onp(self.nn_params.params['mismatch_interior'][pair][RNA_ALPHA[bjp1] + RNA_ALPHA[bim1]])
+        return boltz_onp(self.nn_params.params['mismatch_interior'][pair][RNA_ALPHA[bjp1] + RNA_ALPHA[bim1]], t=self.temp)
 
     def _en_internal_init(self, sz):
         return self.nn_params.params['interior'][sz] # FIXME: check against MAX_LOOP
     def en_internal_init(self, sz):
-        return boltz_onp(self._en_internal_init(sz))
+        return boltz_onp(self._en_internal_init(sz), t=self.temp)
 
     def _en_internal_asym(self, lup, rup):
         asym = onp.abs(lup-rup)
         dg = self.nn_params.params['asymmetry'] * asym
         return onp.min([self.nn_params.params['asymmetry_max'], dg])
     def en_internal_asym(self, lup, rup):
-        return boltz_onp(self._en_internal_asym(lup, rup))
+        return boltz_onp(self._en_internal_asym(lup, rup), t=self.temp)
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
         pair1 = RNA_ALPHA[bi] + RNA_ALPHA[bj]
@@ -491,16 +504,16 @@ class StandardNNModel(NNModel):
 
         if lup == 1 and rup == 1:
             int11_dg = self.nn_params.params['int11'][pair1][pair2][bip1][bjm1]
-            return boltz_onp(int11_dg)
+            return boltz_onp(int11_dg, t=self.temp)
         elif lup == 1 and rup == 2:
             int12_dg = self.nn_params.params['int21'][pair1][pair2][bip1+blp1][bjm1]
-            return boltz_onp(int12_dg)
+            return boltz_onp(int12_dg, t=self.temp)
         elif lup == 2 and rup == 1:
             int21_dg = self.nn_params.params['int21'][pair2][pair1][blp1+ bip1][bkm1]
-            return boltz_onp(int21_dg)
+            return boltz_onp(int21_dg, t=self.temp)
         elif lup == 2 and rup == 2:
             int22_dg = self.nn_params.params['int22'][pair1][pair2][bip1+bkm1][blp1+bjm1]
-            return boltz_onp(int22_dg)
+            return boltz_onp(int22_dg, t=self.temp)
 
         mm_table = self.nn_params.params['mismatch_interior']
         if lup == 1 or rup == 1:
@@ -509,36 +522,40 @@ class StandardNNModel(NNModel):
             mm_table = self.nn_params.params['mismatch_interior_23']
 
         en = self.en_internal_init(lup+rup)*self.en_internal_asym(lup, rup) \
-             * boltz_onp(mm_table[pair1][bip1+bjm1]) \
-             * boltz_onp(mm_table[pair2][blp1+bkm1])
+             * boltz_onp(mm_table[pair1][bip1+bjm1], t=self.temp) \
+             * boltz_onp(mm_table[pair2][blp1+bkm1], t=self.temp)
         return en
 
 
 
 class JaxNNModel(NNModel):
 
-    def __init__(self, params_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE):
+    def __init__(self, params_path=TURNER_2004, 
+                 max_precompute=MAX_PRECOMPUTE, temp=CELL_TEMP):
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
+        
         self.max_precompute = max_precompute
         self.nn_params = NNParams(params_path, max_precompute=max_precompute,
                                   postprocess=True, log=False,
-                                  save_sp_hairpins_jax=True)
+                                  save_sp_hairpins_jax=True, temp=self.temp)
         self.special_hairpins = self.nn_params.special_hairpins
 
     def en_ext_branch(self, bi, bj):
         en = non_gc_pairs_mat[bi, bj] * self.nn_params.params['non_gc_closing_penalty']
-        return all_pairs_mat[bi, bj] * boltz_jnp(en)
+        return all_pairs_mat[bi, bj] * boltz_jnp(en, t=self.temp)
 
     def en_multi_branch(self, bi, bk):
         dg = self.nn_params.params['ml_branch']
         dg += non_gc_pairs_mat[bi, bk] * self.nn_params.params['non_gc_closing_penalty']
 
-        return all_pairs_mat[bi, bk] * boltz_jnp(dg)
+        return all_pairs_mat[bi, bk] * boltz_jnp(dg, t=self.temp)
 
     def en_5dangle(self, bim1, bi, bj):
         b_dangle5 = bim1
         en = jnp.where(b_dangle5 != INVALID_BASE,
                        self.nn_params.params['dangle5'][bi, bj, b_dangle5], 0.0)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_5dangle_inner(self, bi, bjm1, bj):
         return self.en_5dangle(bjm1, bj, bi)
@@ -547,7 +564,7 @@ class JaxNNModel(NNModel):
         b_dangle3 = bjp1
         en = jnp.where(b_dangle3 != INVALID_BASE,
                        self.nn_params.params['dangle3'][bi, bj, b_dangle3], 0.0)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_3dangle_inner(self, bi, bip1, bj):
         return self.en_3dangle(bj, bi, bip1)
@@ -562,18 +579,18 @@ class JaxNNModel(NNModel):
 
     def en_term_mismatch(self, bim1, bi, bj, bjp1):
         en = self._en_term_mismatch(bim1, bi, bj, bjp1)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_term_mismatch_inner(self, bi, bip1, bjm1, bj):
         en = self._en_term_mismatch(bjm1, bj, bi, bip1)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_multi_closing(self, bi, bj):
         closing_pair_dg = self.nn_params.params['ml_initiation']
         closing_pair_dg += self.nn_params.params['ml_branch']
         closing_pair_dg += non_gc_pairs_mat[bi, bj] * self.nn_params.params['non_gc_closing_penalty']
 
-        return all_pairs_mat[bi, bj] * boltz_jnp(closing_pair_dg)
+        return all_pairs_mat[bi, bj] * boltz_jnp(closing_pair_dg, t=self.temp)
 
     def en_hairpin_not_special(self, bi, bj, bip1, bjm1, nunpaired):
         # Note that vienna ignores the all-C case
@@ -586,18 +603,18 @@ class JaxNNModel(NNModel):
         non_gc_closing_penalty = non_gc_pairs_mat[bi, bj] * self.nn_params.params['non_gc_closing_penalty']
 
         en = jnp.where(nunpaired == 3, initiation + non_gc_closing_penalty, initiation + mismatch)
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def en_hairpin_special(self, id):
         # id is the index into self.special_hairpins
         en = self.nn_params.special_hairpin_energies[id]
-        return boltz_jnp(en)
+        return boltz_jnp(en, t=self.temp)
 
     def _en_stack(self, bi, bj, bk, bl):
         en = self.nn_params.params['stack'][bi, bj, bl, bk] # swap bk and bl
         return en
     def en_stack(self, bi, bj, bk, bl):
-        return boltz_jnp(self._en_stack(bi, bj, bk, bl))
+        return boltz_jnp(self._en_stack(bi, bj, bk, bl), t=self.temp)
 
     def bulge_initiation(self, u):
         return self.nn_params.params['bulge'][u] # Note: u must be less than MAX_PRECOMPUTE
@@ -613,23 +630,23 @@ class JaxNNModel(NNModel):
         gc_penalty_dg += non_gc_pairs_mat[bl, bk] * self.nn_params.params['non_gc_closing_penalty']
 
         bulge_dg += jnp.where(nunpaired == 1, stack_dg, gc_penalty_dg)
-        return boltz_jnp(bulge_dg)
+        return boltz_jnp(bulge_dg, t=self.temp)
 
     def en_il_inner_mismatch(self, bi, bj, bip1, bjm1, mm_table):
-        return boltz_jnp(mm_table[bi, bj, bip1, bjm1])
+        return boltz_jnp(mm_table[bi, bj, bip1, bjm1], t=self.temp)
 
     def en_il_outer_mismatch(self, bi, bj, bim1, bjp1, mm_table):
-        return boltz_jnp(mm_table[bj, bi, bjp1, bim1])
+        return boltz_jnp(mm_table[bj, bi, bjp1, bim1], t=self.temp)
 
     def _en_internal_init(self, sz):
         return self.nn_params.params['interior'][sz] # Note: sz must be less than MAX_PRECOMPUTE
     def en_internal_init(self, sz):
-        return boltz_jnp(self._en_internal_init(sz))
+        return boltz_jnp(self._en_internal_init(sz), t=self.temp)
 
     def _en_internal_asym(self, lup, rup):
         return self.nn_params.params['asymmetry_matrix'][lup, rup]
     def en_internal_asym(self, lup, rup):
-        return boltz_jnp(self._en_internal_asym(lup, rup))
+        return boltz_jnp(self._en_internal_asym(lup, rup), t=self.temp)
 
     def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
         mm_table = jnp.where((lup == 1) | (rup == 1),
@@ -643,13 +660,13 @@ class JaxNNModel(NNModel):
                   * self.en_il_outer_mismatch(bk, bl, bkm1, blp1, mm_table)
 
         dg_boltz = jnp.where((lup == 1) & (rup == 1),
-                       boltz_jnp(self.nn_params.params['int11'][bi, bj, bl, bk, bip1, bjm1]),
+                             boltz_jnp(self.nn_params.params['int11'][bi, bj, bl, bk, bip1, bjm1], t=self.temp),
                        jnp.where((lup == 1) & (rup == 2),
-                                 boltz_jnp(self.nn_params.params['int21'][bi, bj, bl, bk, bip1, blp1, bjm1]),
+                                 boltz_jnp(self.nn_params.params['int21'][bi, bj, bl, bk, bip1, blp1, bjm1], t=self.temp),
                                  jnp.where((lup == 2) & (rup == 1),
-                                           boltz_jnp(self.nn_params.params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1]),
+                                           boltz_jnp(self.nn_params.params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1], t=self.temp),
                                            jnp.where((lup == 2) & (rup == 2),
-                                                     boltz_jnp(self.nn_params.params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1]),
+                                                     boltz_jnp(self.nn_params.params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1], t=self.temp),
                                                      gen_int))))
 
         return dg_boltz
@@ -759,7 +776,6 @@ def calculate(str_seq, db, em: Model):
     return calc_rec(-1)
 
 
-beta = 1 / (kb*CELL_TEMP)
 def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
     n = len(branches)
     if n == 0:
@@ -770,20 +786,20 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
         dg = 0.0
         if i+1 < j:
             dangle3_inner_boltz = em.en_3dangle_inner(seq[i], seq[i+1], seq[j])
-            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/beta)
+            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/em.beta)
             if dangle3_inner_dg < dg:
                 dg = dangle3_inner_dg
                 en = dangle3_inner_boltz
 
             dangle5_inner_boltz = em.en_5dangle_inner(seq[i], seq[j-1], seq[j])
-            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/beta)
+            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/em.beta)
             if dangle5_inner_dg < dg:
                 dg = dangle5_inner_dg
                 en = dangle5_inner_boltz
 
             if i+1 < j-1:
                 term_mismatch_inner_boltz = em.en_term_mismatch_inner(seq[i], seq[i+1], seq[j-1], seq[j])
-                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/beta)
+                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/em.beta)
                 if term_mismatch_inner_dg < dg:
                     dg = term_mismatch_inner_dg
                     en = term_mismatch_inner_boltz
@@ -798,11 +814,11 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
                 i, j = branches[b]
                 nexti = branches[b+1][0]
                 dp[last, curr, b] = dp[last, int(nexti > j+1), b+1]
-                current_dg = onp.log(dp[last, curr, b]) * (-1/beta)
+                current_dg = onp.log(dp[last, curr, b]) * (-1/em.beta)
                 if curr == 1:
                     dangle5_boltz = dp[last, int(nexti > j+1), b+1] \
                                     * em.en_5dangle(seq[i-1], seq[i], seq[j])
-                    dangle5_dg = onp.log(dangle5_boltz) * (-1/beta)
+                    dangle5_dg = onp.log(dangle5_boltz) * (-1/em.beta)
                     if dangle5_dg < current_dg:
                         dp[last, curr, b] = dangle5_boltz
                         current_dg = dangle5_dg
@@ -815,7 +831,7 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
 
                     dangle3_boltz = dp[last, int(nexti > j+2), b+1] \
                                     * em.en_3dangle(seq[i], seq[j], seq[j+1])
-                    dangle3_dg = onp.log(dangle3_boltz) * (-1/beta)
+                    dangle3_dg = onp.log(dangle3_boltz) * (-1/em.beta)
                     if dangle3_dg < current_dg:
                         dp[last, curr, b] = dangle3_boltz
                         current_dg = dangle3_dg
@@ -823,7 +839,7 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
                         term_mismatch_boltz = dp[last, int(nexti > j+2), b+1] \
                                               * em.en_term_mismatch(seq[i-1], seq[i],
                                                                     seq[j], seq[j+1])
-                        term_mismatch_dg = onp.log(term_mismatch_boltz) * (-1/beta)
+                        term_mismatch_dg = onp.log(term_mismatch_boltz) * (-1/em.beta)
                         if term_mismatch_dg < current_dg:
                             dp[last, curr, b] = term_mismatch_boltz
                             current_dg = term_mismatch_dg
@@ -835,18 +851,18 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
         fi, fj = branches[0]
         li, lj = branches[-2]
         sm = dp[int(lj < j-1), int(i+1 < fi), 0]
-        current_dg = onp.log(sm) * (-1/beta)
+        current_dg = onp.log(sm) * (-1/em.beta)
         if i+1 < fi:
             dangle3_inner_boltz = dp[int(lj < j-1), int(i+2 < fi), 0] * \
                                   em.en_3dangle_inner(seq[i], seq[i+1], seq[j])
-            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/beta)
+            dangle3_inner_dg = onp.log(dangle3_inner_boltz) * (-1/em.beta)
             if dangle3_inner_dg < current_dg:
                 sm = dangle3_inner_boltz
                 current_dg = dangle3_inner_dg
         if lj < j-1:
             dangle5_inner_boltz = dp[int(lj < j-2), int(i+1 < fi), 0] * \
                                   em.en_5dangle_inner(seq[i], seq[j-1], seq[j])
-            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/beta)
+            dangle5_inner_dg = onp.log(dangle5_inner_boltz) * (-1/em.beta)
             if dangle5_inner_dg < current_dg:
                 sm = dangle5_inner_boltz
                 current_dg = dangle5_inner_dg
@@ -855,7 +871,7 @@ def dangle_dp_min(seq, branches, em: Model, closing_pair=None):
                 term_mismatch_inner_boltz = dp[int(lj < j-2), int(i+2 < fi), 0] * \
                                             em.en_term_mismatch_inner(
                                                 seq[i], seq[i+1], seq[j-1], seq[j])
-                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/beta)
+                term_mismatch_inner_dg = onp.log(term_mismatch_inner_boltz) * (-1/em.beta)
                 if term_mismatch_inner_dg < current_dg:
                     sm = term_mismatch_inner_boltz
                     current_dg = term_mismatch_inner_dg
@@ -874,11 +890,11 @@ def calculate_min(str_seq, db, em: Model):
             branches = []
             for cl in ch[atl]:
                 ext_branch_val = em.en_ext_branch(seq[cl], seq[right[cl]])
-                # print(f"External: {onp.log(ext_branch_val) * (-1/beta)}")
+                # print(f"External: {onp.log(ext_branch_val) * (-1/em.beta)}")
                 sm *= calc_rec(cl)*ext_branch_val
                 branches.append((cl, right[cl]))
             dp_val = dangle_dp_min(seq, branches, em)
-            dp_dg = onp.log(dp_val) * (-1/beta)
+            dp_dg = onp.log(dp_val) * (-1/em.beta)
             # print(f"External dp: {dp_dg}")
             return sm*dp_val
         if atl not in ch:
@@ -888,7 +904,7 @@ def calculate_min(str_seq, db, em: Model):
                 seq[atl], seq[right[atl]], seq[atl+1], seq[right[atl]-1], right[atl]-atl-1)
             # print(atl)
             # print(right[atl])
-            # print(onp.log(hairpin_val) * (-1/beta))
+            # print(onp.log(hairpin_val) * (-1/em.beta))
             return hairpin_val
         elif len(ch[atl]) == 1:
             cl, cr = ch[atl][0], right[ch[atl][0]]
@@ -909,7 +925,7 @@ def calculate_min(str_seq, db, em: Model):
                 lup = cl-atl-1
                 rup = right[atl]-cr-1
                 internal_val = em.en_internal(bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup)
-                # print(f"Internal: {onp.log(internal_val) * (-1/beta)}")
+                # print(f"Internal: {onp.log(internal_val) * (-1/em.beta)}")
                 return internal_val*calc_rec(cl)
         else:
             sm = em.en_multi_closing(seq[atl], seq[right[atl]])
@@ -946,7 +962,7 @@ class TestEnergyCalculator(unittest.TestCase):
 
             matching = dot_bracket_2_matching(db_str)
             calc_boltz = calculate_min(seq, db_str, em)
-            calc_dg = onp.log(calc_boltz) * (-1/beta)
+            calc_dg = onp.log(calc_boltz) * (-1/em.beta)
 
             vienna_dg = vienna_rna.vienna_energy(seq, db_str, dangle_mode=1, params_path=params_path)
             print(f"\t\tCalculated dG: {calc_dg}")

@@ -7,7 +7,8 @@ from copy import deepcopy
 import jax.numpy as jnp
 
 from jax_rnafold.common.utils import NON_GC_PAIRS, RNA_ALPHA, RNA_ALPHA_IDX
-from jax_rnafold.common.utils import CELL_TEMP, MAX_LOOP, TURNER_2004, TURNER_1999, ETERNA_185x
+from jax_rnafold.common.utils import CELL_TEMP, kb, MAX_LOOP, boltz_jnp, boltz_onp
+from jax_rnafold.common.utils import TURNER_2004, TURNER_1999, ETERNA_185x
 from jax_rnafold.common.utils import all_pairs_mat, MAX_PRECOMPUTE
 
 from jax.config import config
@@ -177,7 +178,7 @@ def postprocess_interior_mismatch(raw_interior_mismatch_data):
 
 # Note: stuff has to be put in jax arrays, so we don't keep as dictionaries
 # Note: use RNA_ALPHA indexing for postprocessing
-def postprocess_data(data, max_precompute):
+def postprocess_data(data, max_precompute, temp=temp):
 
     # postprocessed_data = deepcopy(data)
     postprocessed_data = dict()
@@ -357,7 +358,7 @@ def postprocess_data(data, max_precompute):
     postprocessed_data['asymmetry'] = jnp.float64(data['asymmetry'])
     postprocessed_data['asymmetry_max'] = jnp.float64(data['asymmetry_max'])
     postprocessed_data['duplex_init'] = jnp.float64(data['duplex_init'])
-
+    
     # special hairpins
     postprocessed_data['triloops'] = data['triloops']
     postprocessed_data['tetraloops'] = data['tetraloops']
@@ -366,12 +367,25 @@ def postprocess_data(data, max_precompute):
     # print(set(data.keys()) - set(postprocessed_data.keys()))
     # print(set(postprocessed_data.keys()) - set(data.keys()))
 
+    # boltzmann-ed scalars and tables
+    keys_to_boltz = [
+        'non_gc_closing_penalty', 'ml_initiation', 'ml_branch',
+        'dangle5', 'dangle3', 
+        'mismatch_multi', 'mismatch_hairpin', 
+        'mismatch_interior', 'mismatch_interior_23', 'mismatch_interior_1n', 
+        'hairpin', 'stack', 'bulge', 'interior', 
+        'int11', 'int21', 'int22',
+        'asymmetry_matrix'
+    ]
+    for k in keys_to_boltz:
+        postprocessed_data[f"boltz_{k}"] = boltz_jnp(postprocessed_data[k], t=temp)
+
     return postprocessed_data
 
 
-def read(param_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE, postprocess=True, log=False):
+def read(param_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE, 
+         postprocess=True, log=False, temp=CELL_TEMP):
     with open(param_path, 'r') as f:
-        # param_text = f.read()
         param_lines = f.readlines()
 
     # read in chunks
@@ -493,7 +507,7 @@ def read(param_path=TURNER_2004, max_precompute=MAX_PRECOMPUTE, postprocess=True
 
 
     if postprocess:
-        data = postprocess_data(data, max_precompute)
+        data = postprocess_data(data, max_precompute, temp=temp)
     return data
 
 
@@ -501,10 +515,14 @@ class NNParams:
     def __init__(self, params_path=TURNER_2004,
                  max_precompute=MAX_PRECOMPUTE,
                  postprocess=True, log=False,
-                 save_sp_hairpins_jax=False
+                 save_sp_hairpins_jax=False,
+                 temp=CELL_TEMP
     ):
+        self.temp = temp
+        self.beta = 1 / (kb*self.temp)
+
         self.params = read(params_path, max_precompute=max_precompute,
-                           postprocess=postprocess, log=log)
+                           postprocess=postprocess, log=log, temp=self.temp)
 
         self.special_hexaloops = list(self.params['hexaloops'].keys())
         self.special_tetraloops = list(self.params['tetraloops'].keys())
