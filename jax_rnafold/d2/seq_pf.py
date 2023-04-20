@@ -495,97 +495,52 @@ def get_seq_partition_fn(em, db):
     return seq_partition
 
 
-def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
-    from common import utils
-    from tqdm import tqdm
-    import random
-
-    from common import vienna_rna
-    from common import sampling
+class TestSeqPartitionFunction(unittest.TestCase):
 
 
-    seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
+    def fuzz_test(self, n, num_seq, em, max_structs=20, tol_places=6):
+        from tqdm import tqdm
+        import random
 
-    failed_cases = list()
-    n_passed = 0
+        from jax_rnafold.common import vienna_rna
+        from jax_rnafold.common import sampling
+        from jax_rnafold.common import utils
 
-    for seq in seqs:
-        p_seq = jnp.array(seq_to_one_hot(seq))
 
-        print(f"Sequence: {seq}")
-        sampler = sampling.UniformStructureSampler()
-        sampler.precomp(seq)
-        n_structs = sampler.count_structures()
-        if n_structs > max_structs:
-            all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
-        else:
-            all_structs = [sampler.get_nth(i) for i in range(n_structs)]
-        all_structs = [utils.matching_2_dot_bracket(matching) for matching in all_structs]
+        seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
 
-        print(f"Found {len(all_structs)} structures")
+        failed_cases = list()
+        n_passed = 0
 
-        for db_str in tqdm(all_structs):
-            seq_partition_fn = get_seq_partition_fn(em, db_str)
+        for seq in seqs:
+            p_seq = jnp.array(seq_to_one_hot(seq))
 
-            print(f"\n\tStructure: {db_str}")
-
-            reference_seq_pf = energy.calculate(seq, db_str, em)
-            print(f"\t\tReference Seq PF: {reference_seq_pf}")
-
-            seq_pf = seq_partition_fn(p_seq)
-            print(f"\t\tOur Seq PF: {seq_pf}")
-
-            if onp.abs(seq_pf - reference_seq_pf) > tol:
-                failed_cases.append((seq, db_str, reference_seq_pf, seq_pf))
-                print(utils.bcolors.FAIL + "\t\tFail!\n" + utils.bcolors.ENDC)
-                pdb.set_trace()
+            print(f"Sequence: {seq}")
+            sampler = sampling.UniformStructureSampler()
+            sampler.precomp(seq)
+            n_structs = sampler.count_structures()
+            if n_structs > max_structs:
+                all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
             else:
-                print(utils.bcolors.OKGREEN + "\t\tSuccess!\n" + utils.bcolors.ENDC)
-                n_passed += 1
-    if not failed_cases:
-        print(f"\nAll tests passed!")
-    else:
-        print(f"\nFailed tests:")
-        for seq, struct, reference_seq_pf, seq_pf in failed_cases:
-            print(f"- {seq}, {struct} -- {reference_seq_pf} (Reference) vs. {seq_pf}")
+                all_structs = [sampler.get_nth(i) for i in range(n_structs)]
+            all_structs = [utils.matching_2_dot_bracket(matching) for matching in all_structs]
 
+            print(f"Found {len(all_structs)} structures")
 
+            for db_str in tqdm(all_structs):
+                seq_partition_fn = get_seq_partition_fn(em, db_str)
 
-if __name__ == "__main__":
-    from d2 import reference
+                print(f"\n\tStructure: {db_str}")
 
-    em = energy.JaxNNModel()
-    # em = energy.RandomHairpinModel()
-    # em = energy.RandomILModel()
-    # em = energy.RandomBulgeModel()
-    # em = energy.RandomMultiloopModel()
+                reference_seq_pf = energy.calculate(seq, db_str, em)
+                print(f"\t\tReference Seq PF: {reference_seq_pf}")
 
-    fuzz_test(n=24, num_seq=10, em=em, tol=1e-6)
-    pdb.set_trace()
+                seq_pf = seq_partition_fn(p_seq)
+                print(f"\t\tOur Seq PF: {seq_pf}")
 
+                self.assertAlmostEqual(seq_pf, reference_seq_pf, places=tol_places)
 
-    # seq = "GGAAACGAAACC"
-    # db_str = "((...)(...))" # simple multiloop
+    def test_reference(self):
+        em = energy.JaxNNModel()
+        self.fuzz_test(n=20, num_seq=16, em=em, tol_places=12, max_structs=50)
 
-    seq = "CAUACAGGUUUAGUAAUUGGC"
-    db_str = "((.(....).).)(....).."
-
-
-    p_seq = jnp.array(seq_to_one_hot(seq))
-
-    em = energy.RandomILModel()
-
-
-    seq_partition_fn = get_seq_partition_fn(em, db_str)
-    start = time.time()
-    seq_pf = seq_partition_fn(p_seq)
-    end = time.time()
-    print(f"Our seq pf: {seq_pf}")
-
-    reference_discrete_seq_pf = energy.calculate(seq, db_str, em)
-    print(f"Reference discrete seq pf: {reference_discrete_seq_pf}")
-
-    # reference_seq_pf = reference.seq_partition(p_seq, db_str, em)
-    # print(f"Reference seq pf: {reference_discrete_seq_pf}")
-
-    pdb.set_trace()

@@ -135,7 +135,7 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-MAX_PRECOMPUTE = 200
+MAX_PRECOMPUTE = 500
 
 
 def random_pseq(n):
