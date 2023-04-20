@@ -178,7 +178,7 @@ def postprocess_interior_mismatch(raw_interior_mismatch_data):
 
 # Note: stuff has to be put in jax arrays, so we don't keep as dictionaries
 # Note: use RNA_ALPHA indexing for postprocessing
-def postprocess_data(data, max_precompute, temp=temp):
+def postprocess_data(data, max_precompute, temp=CELL_TEMP):
 
     # postprocessed_data = deepcopy(data)
     postprocessed_data = dict()

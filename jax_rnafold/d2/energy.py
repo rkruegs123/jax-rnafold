@@ -78,8 +78,8 @@ class Model(ABC):
         return en
 
 
-class All1Model(Model, temp=CELL_TEMP):
-    def __init__(self):
+class All1Model(Model):
+    def __init__(self, temp=CELL_TEMP):
         # self.special_hairpins = list()
         self.special_hairpins = ["AAA", "AAAA", "AAAAAA"]
         self.temp = temp
@@ -119,8 +119,8 @@ class All1Model(Model, temp=CELL_TEMP):
         return 1
 
 
-class RandomModel(Model, temp=CELL_TEMP):
-    def __init__(self, seed=1):
+class RandomModel(Model):
+    def __init__(self, temp=CELL_TEMP, seed=1):
         self.seed = seed
         # self.special_hairpins = list()
         self.special_hairpins = ["AAA", "AAAA", "AAAAAA"]
