@@ -19,6 +19,7 @@ from jax_rnafold.common.utils import MAX_PRECOMPUTE, MAX_LOOP
 from jax_rnafold.common import brute_force
 from jax_rnafold.common import nussinov as nus
 from jax_rnafold.common.utils import get_rand_seq, seq_to_one_hot, random_pseq
+from jax_rnafold.common import vienna_rna
 
 from jax_rnafold.d2 import energy
 from jax_rnafold.d2 import dp_discrete
@@ -534,7 +535,7 @@ class TestPartitionFunction(unittest.TestCase):
         print(n, brute, vien)
         self.assertAlmostEqual(brute, vien, places=7)
 
-    def _reference_ss_test(self, em, n):
+    def reference_ss_test(self, em, n):
         p_seq = random_pseq(n)
         ss_partition_fn = get_ss_partition_fn(em, n)
         vien = ss_partition_fn(p_seq)
@@ -576,6 +577,7 @@ class TestPartitionFunction(unittest.TestCase):
     def test_nn_to_16(self):
 
         em = energy.JaxNNModel()
+        em_onp = energy.StandardNNModel()
 
         n_seq = 3
         # for n in range(10, 20): # next do 29, then 30, then 31, 32
@@ -591,6 +593,21 @@ class TestPartitionFunction(unittest.TestCase):
                 end = time.time()
                 print(f"Fuzzy-compatible SS partition took: {onp.round(end - start, 2)} seconds")
 
+                """
+                start = time.time()
+                reference_pf = reference.ss_partition(p_seq, em_onp)
+                end = time.time()
+                print(f"Reference SS partition took: {onp.round(end - start, 2)} seconds")
+                print(seq, reference_pf, pf, onp.abs(reference_pf - pf))
+                self.assertAlmostEqual(reference_pf, pf, places=7)
+                """
+
+                vienna_pf = vienna_rna.get_vienna_pf(seq)
+                print(f"Vienna partition function: {vienna_pf}")
+                print(seq, vienna_pf, pf, onp.abs(vienna_pf - pf))
+                self.assertAlmostEqual(vienna_pf, pf, places=7)
+
+                """
                 start = time.time()
                 discrete_pf = dp_discrete.compute_pf(seq)
                 end = time.time()
@@ -598,6 +615,7 @@ class TestPartitionFunction(unittest.TestCase):
                 print(seq, discrete_pf, pf, onp.abs(discrete_pf - pf))
 
                 self.assertAlmostEqual(discrete_pf, pf, places=7)
+                """
 
 
                 """
