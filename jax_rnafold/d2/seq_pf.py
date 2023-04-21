@@ -312,20 +312,23 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
             bl = bp[1]
 
             pr_ij_mm = padded_p_seq[i+1, bip1]*padded_p_seq[j-1, bjm1]
-            bp_1n_sm = P[bk, bl, i+2, j-2]*padded_p_seq[i+2, bk]*padded_p_seq[j-2, bl] * \
-                       pr_ij_mm * em.en_internal(bi, bj, bk, bl,
-                                                 bip1, bjm1, bip1, bjm1, 1, 1)
+            bp_1n_sm = P[bk, bl, i+2, j-2] * padded_p_seq[i+2, bk] * padded_p_seq[j-2, bl] \
+                       * pr_ij_mm \
+                       * em.en_internal(bi, bj, bk, bl, bip1, bjm1, bip1, bjm1, 1, 1) \
+                       * up[i, i+2] * up[j-2, j]
 
             def get_z_b_sm(z, b):
                 zb_sm = 0.0
                 il_en = em.en_internal(
                     bi, bj, bk, bl, bip1, bjm1, bip1, b, 1, j-z-1)
                 zb_sm += P[bk, bl, i+2, z]*padded_p_seq[i+2, bk] * \
-                    padded_p_seq[z, bl]*padded_p_seq[z+1, b]*pr_ij_mm*il_en
+                    padded_p_seq[z, bl]*padded_p_seq[z+1, b]*pr_ij_mm*il_en * \
+                    up[i, i+2] * up[z, j]
                 il_en = em.en_internal(
                     bi, bj, bk, bl, bip1, bjm1, b, bjm1, z-i-1, 1)
                 zb_sm += P[bk, bl, z, j-2]*padded_p_seq[z, bk] * \
-                    padded_p_seq[j-2, bl]*padded_p_seq[z-1, b]*pr_ij_mm*il_en
+                    padded_p_seq[j-2, bl]*padded_p_seq[z-1, b]*pr_ij_mm*il_en * \
+                    up[i, z] * up[j-2, j]
                 return zb_sm
 
             def get_z_all_bs_sm(z_offset):
@@ -364,7 +367,8 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
                 return P[bk, bl, k, l] * padded_p_seq[k, bk] * padded_p_seq[l, bl] \
                     * em.en_internal(bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup) \
                     * padded_p_seq[k-1, bkm1] * padded_p_seq[l+1, blp1] \
-                    * padded_p_seq[i+1, bip1] * padded_p_seq[j-1, bjm1]
+                    * padded_p_seq[i+1, bip1] * padded_p_seq[j-1, bjm1] \
+                    * up[i, k] * up[l, j]
             get_all_summands = vmap(get_bp_22_23_32_summand, (None, None, None, 0))
             get_all_summands = vmap(get_all_summands, (None, None, 0, None))
             get_all_summands = vmap(get_all_summands, (None, 0, None, None))
@@ -395,7 +399,7 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
                             * em.en_internal_asym(lup, rup) \
                             * P[bk, bl, k, l] \
                             * padded_p_seq[k, bk]*padded_p_seq[l, bl]
-            gen_sm = OMM[bk, bl, k, l]*mmij*init_and_pair
+            gen_sm = OMM[bk, bl, k, l]*mmij*init_and_pair*up[i, k]*up[l, j]
 
             return jnp.where(cond, gen_sm, 0.0)
 
@@ -558,4 +562,3 @@ class TestSeqPartitionFunction(unittest.TestCase):
     def test_reference(self):
         em = energy.JaxNNModel()
         self.fuzz_test(n=20, num_seq=16, em=em, tol_places=12, max_structs=50)
-
