@@ -9,8 +9,6 @@ import optax
 from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
-from jax.config import config
-config.update("jax_enable_x64", True)
 
 import energy
 from checkpoint import checkpoint_scan
@@ -25,6 +23,11 @@ import nussinov as nus
 import dp_discrete
 from utils import get_rand_seq, seq_to_one_hot
 import vienna
+import vienna_rna
+
+
+from jax.config import config
+config.update("jax_enable_x64", True)
 
 
 
@@ -188,17 +191,28 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
     def psum_bulges(bi, bj, i, j, padded_p_seq, P):
 
         def get_bp_kl(bp, kl_offset):
-            kl = kl_offset + i + 2
-            cond = (kl >= i+2) & (kl < j-1)
-            bp_kl_sm = 0
             bk = bp[0]
             bl = bp[1]
+            bp_kl_sm = 0
 
-            bp_kl_sm += P[bk, bl, i+1, kl]*padded_p_seq[i+1, bk] * \
-                padded_p_seq[kl, bl]*em.en_bulge(bi, bj, bk, bl, j-kl-1)
-            bp_kl_sm += P[bk, bl, kl, j-1]*padded_p_seq[kl, bk] * \
-                padded_p_seq[j-1, bl]*em.en_bulge(bi, bj, bk, bl, kl-i-1)
-            return jnp.where(cond, bp_kl_sm, 0.0) # default is 0.0 because we will sum
+            # Right Bulge
+            l = j-2-kl_offset
+            right_cond = (l >= i+2)
+            right_val = P[bk, bl, i+1, l]*padded_p_seq[i+1, bk] * \
+                padded_p_seq[l, bl]*em.en_bulge(bi, bj, bk, bl, j-l-1)
+            bp_kl_sm += jnp.where(right_cond, right_val, 0.0)
+
+
+
+            # Left bulge
+            k = i+2+kl_offset
+            left_cond = (k < j-1)
+            left_val = P[bk, bl, k, j-1]*padded_p_seq[k, bk] * \
+                padded_p_seq[j-1, bl]*em.en_bulge(bi, bj, bk, bl, k-i-1)
+            bp_kl_sm += jnp.where(left_cond, left_val, 0.0)
+
+            return bp_kl_sm
+
 
         def get_bp_all_kl(bp):
             # all_kls = jnp.arange(n+1) # FIXME: is this the appropriate size? Will we be missing anything?
@@ -229,25 +243,35 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
                        pr_ij_mm * em.en_internal(bi, bj, bk, bl,
                                                  bip1, bjm1, bip1, bjm1, 1, 1)
 
-            def get_z_b_sm(z, b):
+            def get_z_b_sm(z_offset, b):
                 zb_sm = 0.0
+
+                l = j-3-z_offset
+                l_cond = (l >= i+3)
                 il_en = em.en_internal(
-                    bi, bj, bk, bl, bip1, bjm1, bip1, b, 1, j-z-1)
-                zb_sm += P[bk, bl, i+2, z]*padded_p_seq[i+2, bk] * \
-                    padded_p_seq[z, bl]*padded_p_seq[z+1, b]*pr_ij_mm*il_en
+                    bi, bj, bk, bl, bip1, bjm1, bip1, b, 1, j-l-1)
+                right_term = P[bk, bl, i+2, l]*padded_p_seq[i+2, bk] * \
+                    padded_p_seq[l, bl]*padded_p_seq[l+1, b]*pr_ij_mm*il_en
+                zb_sm += jnp.where(l_cond, right_term, 0.0)
+
+                k = i+3+z_offset
+                k_cond = (k < j-2)
                 il_en = em.en_internal(
-                    bi, bj, bk, bl, bip1, bjm1, b, bjm1, z-i-1, 1)
-                zb_sm += P[bk, bl, z, j-2]*padded_p_seq[z, bk] * \
-                    padded_p_seq[j-2, bl]*padded_p_seq[z-1, b]*pr_ij_mm*il_en
+                    bi, bj, bk, bl, bip1, bjm1, b, bjm1, k-i-1, 1)
+                left_term = P[bk, bl, k, j-2]*padded_p_seq[k, bk] * \
+                    padded_p_seq[j-2, bl]*padded_p_seq[k-1, b]*pr_ij_mm*il_en
+                zb_sm += jnp.where(k_cond, left_term, 0.0)
+                
                 return zb_sm
 
             def get_z_all_bs_sm(z_offset):
-                z = z_offset + i + 3
-                all_bs_summands = vmap(get_z_b_sm, (None, 0))(z, N4)
+                # z = z_offset + i + 3
+                all_bs_summands = vmap(get_z_b_sm, (None, 0))(z_offset, N4)
                 all_bs_sm = jnp.sum(all_bs_summands)
 
-                cond = (z >= i+3) & (z < j-2)
-                return jnp.where(cond, all_bs_sm, 0.0)
+                # cond = (z >= i+3) & (z < j-2)
+                # return jnp.where(cond, all_bs_sm, 0.0)
+                return all_bs_sm
 
             # zs = jnp.arange(n+2) # FIXME: is this the right range? Does it miss anything?
             # all_zs_sms = vmap(get_z_all_bs_sm)(zs)
@@ -273,7 +297,8 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
         def get_bp_general_sm(bp, k_offset, l_offset):
             k = k_offset + i + 2
-            l = l_offset + k + 1 # note: uses the k from above that includes k_offset. Order matters here.
+            # l = l_offset + k + 1 # note: uses the k from above that includes k_offset. Order matters here.
+            l = j - l_offset - 2
 
             bk = bp[0]
             bl = bp[1]
@@ -538,25 +563,48 @@ class TestPartitionFunction(unittest.TestCase):
         # self._max_ss_test(em, n)
 
 
-    def _test_all_1_model_to_10(self):
+    def test_all_1_model_to_10(self):
         print("Starting test: [test_all_1_model_to_10]")
         for n in range(1, 10):
             self._all_1_test(n)
 
-    def _test_all_1_model_12(self):
+    def test_all_1_model_12(self):
         # First multiloop for HAIRPIN=3
         print("Starting test: [test_all_1_model_12]")
         self._all_1_test(12)
 
-    def _test_all_1_model_20(self):
+    def test_all_1_model_20(self):
         print("Starting test: [test_all_1_model_20]")
         self._all_1_test(20)
 
 
-    def _test_random_model_to_10(self):
+    def test_random_model_to_10(self):
         print("Starting test: [test_random_model_to_10]")
         for n in range(1, 10):
             self._random_test(n)
+
+    def vienna_one_hot_fuzz_test(self, n, n_seq, tol_places=3):
+        em = energy.JaxNNModel()
+        ss_fn = jit(get_ss_partition_fn(em, n))
+
+        for i in range(n_seq):
+            seq = get_rand_seq(n)
+            p_seq = jnp.array(seq_to_one_hot(seq))
+
+            pf_calc = jit(ss_fn)(p_seq)
+            pf_vienna = vienna_rna.get_vienna_pf(seq)
+            pf_diff = onp.abs(pf_calc - pf_vienna)
+
+            print(f"\nSeq {i}: {seq}")
+            print(f"- Calc: {pf_calc}")
+            print(f"- Vienna: {pf_vienna}")
+            print(f"- Diff: {pf_diff}")
+            
+            self.assertAlmostEqual(pf_calc, pf_vienna, places=tol_places)
+
+    def test_fuzz_vienna(self):
+        self.vienna_one_hot_fuzz_test(n=10, n_seq=20, tol_places=3)
+            
 
     def test_nn_to_8(self):
 
@@ -599,122 +647,9 @@ class TestPartitionFunction(unittest.TestCase):
 
 
 
-def train(seq_logits, em, n_iter, print_every):
-
-    ss_partition_fn = get_ss_partition_fn(em)
-    ss_partition_fn = jit(ss_partition_fn)
-    # ss_partition_grad = value_and_grad(ss_partition_fn)
-    # ss_partition_grad = jit(ss_partition_grad)
-
-    # Define a lambda that converts logits to p_seq in the desired way
-    # FIXME: could have an option for gumbal
-    def fold_logits(params):
-        curr_logits = params['seq_logits']
-        p_seq = jax.nn.softmax(curr_logits)
-        return ss_partition_fn(p_seq)
-    fold_logits_grad = value_and_grad(fold_logits)
-    fold_logits_grad = jit(fold_logits_grad)
-
-    # Note that we use an optimizer from optax: https://github.com/deepmind/optax
-    # learning_rate = 1e-1
-    learning_rate = 1e-1
-    optimizer = optax.adam(learning_rate)
-    params = {'seq_logits': seq_logits}
-    opt_state = optimizer.init(params)
-
-    all_times = list()
-    for i in range(n_iter):
-        start = time.time()
-
-        loss, _grad = fold_logits_grad(params)
-        updates, opt_state = optimizer.update(_grad, opt_state)
-        params = optax.apply_updates(params, updates)
-
-        end = time.time()
-        iter_time = end - start
-        all_times.append(end - start)
-
-        if i % print_every == 0:
-            print(f"{i}: {loss}")
-
-    return params, all_times
-
-def test_train(n, n_iter, print_every=10):
-    lo = 0
-    hi = 100
-
-    seq_logits = onp.random.uniform(low=lo, high=hi, size=(n, 4))
-    seq_logits = jnp.array(seq_logits, dtype=jnp.float64)
-
-    em = energy.JaxNNModel()
-
-    return train(seq_logits, em, n_iter, print_every)
-
-
 if __name__ == "__main__":
-
     unittest.main()
-    pdb.set_trace()
 
 
-    # final_params, all_times = test_train(n=46, n_iter=5, print_every=1)
-    # pdb.set_trace()
-
-    # NN testing
-    """
-    seq = "CAAAG"
-    # seq = "GUUGC"
-    p_seq = jnp.array(seq_to_one_hot(seq))
-
-    start = time.time()
-    discrete_pf = dp_discrete.compute_pf(seq)
-    end = time.time()
-    print(f"Discrete-compatible SS partition took: {onp.round(end - start, 2)} seconds")
-
-    em = energy.JaxNNModel()
-    ss_partition_fn = get_ss_partition_fn(em)
-
-    start = time.time()
-    pf = ss_partition_fn(p_seq)
-    end = time.time()
-    print(f"Fuzzy-compatible SS partition took: {onp.round(end - start, 2)} seconds")
-
-    print(seq, discrete_pf, pf)
-    pdb.set_trace()
-    """
 
 
-    import vienna
-
-
-    n = 256
-    # n = 16
-
-    if n >= MAX_PRECOMPUTE:
-        pdb.set_trace()
-
-    p_seq = onp.empty((n, 4), dtype=onp.float64)
-    for i in range(n):
-        p_seq[i] = onp.random.random_sample(4)
-        p_seq[i] /= onp.sum(p_seq[i])
-    p_seq = jnp.array(p_seq)
-
-
-    em = energy.JaxNNModel()
-    ss_partition_fn = get_ss_partition_fn(em, n)
-    grad_ss_partition_fn = jit(grad(ss_partition_fn))
-
-    start = time.time()
-    # ss_partition_fn(p_seq)
-    # our_val, our_grad = jit(value_and_grad(ss_partition_fn))(p_seq)
-    our_grad = grad_ss_partition_fn(p_seq)
-    # our_val = jit(ss_partition_fn)(p_seq)
-    # reference_val = vienna.ss_partition(p_seq, em)
-    end = time.time()
-    print(f"Total time: {onp.round(end - start, 2)}")
-
-    start = time.time()
-    our_grad = grad_ss_partition_fn(p_seq)
-    end = time.time()
-    print(f"Total time: {onp.round(end - start, 2)}")
-    pdb.set_trace()

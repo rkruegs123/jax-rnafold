@@ -3,6 +3,8 @@ import pdb
 import functools
 import unittest
 import time
+from tqdm import tqdm
+import random
 
 import jax
 import optax
@@ -18,12 +20,15 @@ from utils import bp_bases, HAIRPIN, N4, INVALID_BASE
 from utils import SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_LENS, \
     SPECIAL_HAIRPIN_IDXS, N_SPECIAL_HAIRPINS, SPECIAL_HAIRPIN_START_POS
 from utils import matching_to_db
-from utils import MAX_PRECOMPUTE
+from utils import MAX_PRECOMPUTE, MAX_LOOP
 import brute_force
 import nussinov as nus
 
 import dp_discrete
 from utils import get_rand_seq, seq_to_one_hot
+import utils
+import vienna_rna
+import sampling
 
 
 f64 = jnp.float64
@@ -37,8 +42,9 @@ else:
 
 
 # TODO (RK): save n, don't pass around everywhere else that we already are. Then, test lax.cond
-def get_seq_partition_fn(em, db):
+def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
     n = len(db)
+    two_loop_length = min(n, max_loop)
 
     match = [i for i in range(n+1)]
     stk = []
@@ -278,21 +284,36 @@ def get_seq_partition_fn(em, db):
 
     def psum_bulges(bi, bj, i, j, padded_p_seq, n, P):
 
-        def get_bp_kl(bp, kl):
-            cond = (kl >= i+2) & (kl < j-1)
-            bp_kl_sm = 0
+        def get_bp_kl(bp, kl_offset):
             bk = bp[0]
             bl = bp[1]
+            bp_kl_sm = 0
 
-            bp_kl_sm += P[bk, bl, i+1, kl]*padded_p_seq[i+1, bk] * \
-                padded_p_seq[kl, bl]*em.en_bulge(bi, bj, bk, bl, j-kl-1)*up[kl, j] # note the lookpu in `up`
-            bp_kl_sm += P[bk, bl, kl, j-1]*padded_p_seq[kl, bk] * \
-                padded_p_seq[j-1, bl]*em.en_bulge(bi, bj, bk, bl, kl-i-1)*up[i, kl] # note the lookup in `up`
-            return jnp.where(cond, bp_kl_sm, 0.0) # default is 0.0 because we will sum
 
+            # Right bulge
+            l = j-2-kl_offset
+            right_cond = (l >= i+2)
+            right_val = P[bk, bl, i+1, l]*padded_p_seq[i+1, bk] * \
+                padded_p_seq[l, bl]*em.en_bulge(bi, bj, bk, bl, j-l-1) * \
+                up[l, j] # note the lookup in `up`
+            bp_kl_sm += jnp.where(right_cond, right_val, 0.0)
+
+            # Left bulge
+            k = i+2+kl_offset
+            left_cond = (k < j-1)
+            left_val = P[bk, bl, k, j-1]*padded_p_seq[k, bk] * \
+                padded_p_seq[j-1, bl]*em.en_bulge(bi, bj, bk, bl, k-i-1) * \
+                up[i, k] # note the lookup in `up`
+            bp_kl_sm += jnp.where(left_cond, left_val, 0.0)
+
+            return bp_kl_sm
+            
+            
         def get_bp_all_kl(bp):
-            all_kls = jnp.arange(n+1)
-            all_bp_kl_sms = vmap(get_bp_kl, (None, 0))(bp, all_kls)
+            # all_kls = jnp.arange(n+1)
+            all_kl_offsets = jnp.arange(two_loop_length)
+            # all_bp_kl_sms = vmap(get_bp_kl, (None, 0))(bp, all_kls)
+            all_bp_kl_sms = vmap(get_bp_kl, (None, 0))(bp, all_kl_offsets)
             return jnp.sum(all_bp_kl_sms)
 
         all_bp_sms = vmap(get_bp_all_kl)(bp_bases)
@@ -319,29 +340,43 @@ def get_seq_partition_fn(em, db):
                        * em.en_internal(bi, bj, bk, bl, bip1, bjm1, bip1, bjm1, 1, 1) \
                        * up[i, i+2] * up[j-2, j]
 
-            def get_z_b_sm(z, b):
+            def get_z_b_sm(z_offset, b):
                 zb_sm = 0.0
-                il_en = em.en_internal(
-                    bi, bj, bk, bl, bip1, bjm1, bip1, b, 1, j-z-1)
-                zb_sm += P[bk, bl, i+2, z]*padded_p_seq[i+2, bk] \
-                    * padded_p_seq[z, bl]*padded_p_seq[z+1, b]*pr_ij_mm*il_en \
-                    * up[i, i+2] * up[z, j]
-                il_en = em.en_internal(
-                    bi, bj, bk, bl, bip1, bjm1, b, bjm1, z-i-1, 1)
-                zb_sm += P[bk, bl, z, j-2]*padded_p_seq[z, bk] \
-                    * padded_p_seq[j-2, bl]*padded_p_seq[z-1, b]*pr_ij_mm*il_en \
-                    * up[i, z] * up[j-2, j]
-                return zb_sm
 
-            def get_z_all_bs_sm(z):
-                all_bs_summands = vmap(get_z_b_sm, (None, 0))(z, N4)
+
+                l = j-3-z_offset
+                l_cond = (l >= i+3)
+                il_en = em.en_internal(
+                    bi, bj, bk, bl, bip1, bjm1, bip1, b, 1, j-l-1)
+                right_term = P[bk, bl, i+2, l]*padded_p_seq[i+2, bk] * \
+                    padded_p_seq[l, bl]*padded_p_seq[l+1, b]*pr_ij_mm*il_en * \
+                    up[i, i+2] * up[l, j]
+                zb_sm += jnp.where(l_cond, right_term, 0.0)
+
+                k = i+3+z_offset
+                k_cond = (k < j-2)
+                il_en = em.en_internal(
+                    bi, bj, bk, bl, bip1, bjm1, b, bjm1, k-i-1, 1)
+                left_term = P[bk, bl, k, j-2]*padded_p_seq[k, bk] * \
+                    padded_p_seq[j-2, bl]*padded_p_seq[k-1, b]*pr_ij_mm*il_en * \
+                    up[i, k] * up[j-2, j]
+                zb_sm += jnp.where(k_cond, left_term, 0.0)
+                
+                return zb_sm            
+
+            def get_z_all_bs_sm(z_offset):
+                all_bs_summands = vmap(get_z_b_sm, (None, 0))(z_offset, N4)
                 all_bs_sm = jnp.sum(all_bs_summands)
 
-                cond = (z >= i+3) & (z < j-2)
-                return jnp.where(cond, all_bs_sm, 0.0)
+                # cond = (z >= i+3) & (z < j-2)
+                # return jnp.where(cond, all_bs_sm, 0.0)
+                return all_bs_sm
 
-            zs = jnp.arange(n+2)
-            all_zs_sms = vmap(get_z_all_bs_sm)(zs)
+            # zs = jnp.arange(n+2)
+            # all_zs_sms = vmap(get_z_all_bs_sm)(zs)
+            z_offsets = jnp.arange(two_loop_length)
+            all_zs_sms = vmap(get_z_all_bs_sm)(z_offsets)
+            
             bp_1n_sm += jnp.sum(all_zs_sms)
             return bp_1n_sm
 
@@ -497,97 +532,61 @@ def get_seq_partition_fn(em, db):
     return seq_partition
 
 
-def fuzz_test(n, num_seq, em, tol=1e-6, max_structs=20):
-    import utils
-    from tqdm import tqdm
-    import random
+class TestSeqPartitionFunction(unittest.TestCase):
 
-    import vienna_rna
-    import sampling
+    def fuzz_test(self, n, num_seq, em, tol_places=6, max_structs=20):
 
 
-    seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
+        seqs = [utils.get_rand_seq(n) for _ in range(num_seq)]
 
-    failed_cases = list()
-    n_passed = 0
+        failed_cases = list()
+        n_passed = 0
 
-    for seq in seqs:
-        p_seq = jnp.array(seq_to_one_hot(seq))
+        for seq in seqs:
+            p_seq = jnp.array(seq_to_one_hot(seq))
 
-        print(f"Sequence: {seq}")
-        sampler = sampling.UniformStructureSampler()
-        sampler.precomp(seq)
-        n_structs = sampler.count_structures()
-        if n_structs > max_structs:
-            all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
-        else:
-            all_structs = [sampler.get_nth(i) for i in range(n_structs)]
-        all_structs = [utils.matching_2_dot_bracket(matching) for matching in all_structs]
-
-        print(f"Found {len(all_structs)} structures")
-
-        for db_str in tqdm(all_structs):
-            seq_partition_fn = get_seq_partition_fn(em, db_str)
-
-            print(f"\n\tStructure: {db_str}")
-
-            reference_seq_pf = energy.calculate(seq, db_str, em)
-            print(f"\t\tReference Seq PF: {reference_seq_pf}")
-
-            seq_pf = seq_partition_fn(p_seq)
-            print(f"\t\tOur Seq PF: {seq_pf}")
-
-            if onp.abs(seq_pf - reference_seq_pf) > tol:
-                failed_cases.append((seq, db_str, reference_seq_pf, seq_pf))
-                print(utils.bcolors.FAIL + "\t\tFail!\n" + utils.bcolors.ENDC)
-                pdb.set_trace()
+            print(f"Sequence: {seq}")
+            sampler = sampling.UniformStructureSampler()
+            sampler.precomp(seq)
+            n_structs = sampler.count_structures()
+            if n_structs > max_structs:
+                all_structs = [sampler.get_nth(i) for i in random.sample(list(range(n_structs)), max_structs)]
             else:
+                all_structs = [sampler.get_nth(i) for i in range(n_structs)]
+            all_structs = [utils.matching_2_dot_bracket(matching) for matching in all_structs]
+
+            print(f"Found {len(all_structs)} structures")
+
+            for db_str in tqdm(all_structs):
+                seq_partition_fn = get_seq_partition_fn(em, db_str)
+
+                print(f"\n\tStructure: {db_str}")
+
+                reference_seq_pf = energy.calculate(seq, db_str, em)
+                print(f"\t\tReference Seq PF: {reference_seq_pf}")
+
+                seq_pf = seq_partition_fn(p_seq)
+                print(f"\t\tOur Seq PF: {seq_pf}")
+
+                difference = onp.abs(seq_pf - reference_seq_pf)
+                print(f"\t\tDifference: {difference}")
+
+                self.assertAlmostEqual(seq_pf, reference_seq_pf, places=tol_places)
                 print(utils.bcolors.OKGREEN + "\t\tSuccess!\n" + utils.bcolors.ENDC)
-                n_passed += 1
-    if not failed_cases:
-        print(f"\nAll tests passed!")
-    else:
-        print(f"\nFailed tests:")
-        for seq, struct, reference_seq_pf, seq_pf in failed_cases:
-            print(f"- {seq}, {struct} -- {reference_seq_pf} (Reference) vs. {seq_pf}")
+
+    def test_fuzz(self):
+        em = energy.JaxNNModel()
+        # em = energy.RandomHairpinModel()
+        # em = energy.RandomILModel()
+        # em = energy.RandomBulgeModel()
+        # em = energy.RandomMultiloopModel()
+
+        self.fuzz_test(n=40, num_seq=32, em=em, tol_places=6)
 
 
 
 if __name__ == "__main__":
-    import vienna
-
-    em = energy.JaxNNModel()
-    # em = energy.RandomHairpinModel()
-    # em = energy.RandomILModel()
-    # em = energy.RandomBulgeModel()
-    # em = energy.RandomMultiloopModel()
-
-    fuzz_test(n=24, num_seq=10, em=em, tol=1e-6)
-    pdb.set_trace()
+    unittest.main()
+    
 
 
-    # seq = "GGAAACGAAACC"
-    # db_str = "((...)(...))" # simple multiloop
-
-    seq = "CAUACAGGUUUAGUAAUUGGC"
-    db_str = "((.(....).).)(....).."
-
-
-    p_seq = jnp.array(seq_to_one_hot(seq))
-
-    em = energy.RandomILModel()
-
-
-    seq_partition_fn = get_seq_partition_fn(em, db_str)
-    start = time.time()
-    seq_pf = seq_partition_fn(p_seq)
-    end = time.time()
-    print(f"Our seq pf: {seq_pf}")
-
-    reference_discrete_seq_pf = energy.calculate(seq, db_str, em)
-    print(f"Reference discrete seq pf: {reference_discrete_seq_pf}")
-
-    # reference_seq_pf = vienna.seq_partition(p_seq, db_str, em)
-    # print(f"Reference seq pf: {reference_discrete_seq_pf}")
-
-    pdb.set_trace()

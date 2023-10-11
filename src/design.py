@@ -213,7 +213,7 @@ def run_all(optimizer="rms-prop", lr=0.1, n_iter=200, data_basedir=Path("data/")
 
 if __name__ == "__main__":
     run_all()
-    pdb.set_trace()
+    # pdb.set_trace()
 
 
     # get_structs_within_length(50)
