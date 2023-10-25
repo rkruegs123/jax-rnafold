@@ -4,6 +4,8 @@ This repository contains relevant code for the paper under submission titled "Di
 
 To reproduce the results of our method on the Eterna100 structures of length at most 50, please create a `data/` directory in the base directory and run `python3 src/design.py` from the base directory. Be sure to install JAX per the [installation guide](https://github.com/google/jax#installation).
 
+This code is made available for research purposes only and is not to be used for commercial purposes of any kind.
+
 ## Citation
 
 Please use refer to the following DOI's for appropriately citing this work:
