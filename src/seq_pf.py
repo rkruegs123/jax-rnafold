@@ -11,8 +11,9 @@ import optax
 from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
-from jax.config import config
-config.update("jax_enable_x64", True)
+# from jax.config import config
+# config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 import energy
 from checkpoint import checkpoint_scan
@@ -307,8 +308,8 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
             bp_kl_sm += jnp.where(left_cond, left_val, 0.0)
 
             return bp_kl_sm
-            
-            
+
+
         def get_bp_all_kl(bp):
             # all_kls = jnp.arange(n+1)
             all_kl_offsets = jnp.arange(two_loop_length)
@@ -361,8 +362,8 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
                     padded_p_seq[j-2, bl]*padded_p_seq[k-1, b]*pr_ij_mm*il_en * \
                     up[i, k] * up[j-2, j]
                 zb_sm += jnp.where(k_cond, left_term, 0.0)
-                
-                return zb_sm            
+
+                return zb_sm
 
             def get_z_all_bs_sm(z_offset):
                 all_bs_summands = vmap(get_z_b_sm, (None, 0))(z_offset, N4)
@@ -376,7 +377,7 @@ def get_seq_partition_fn(em, db, max_loop=MAX_LOOP):
             # all_zs_sms = vmap(get_z_all_bs_sm)(zs)
             z_offsets = jnp.arange(two_loop_length)
             all_zs_sms = vmap(get_z_all_bs_sm)(z_offsets)
-            
+
             bp_1n_sm += jnp.sum(all_zs_sms)
             return bp_1n_sm
 
@@ -587,6 +588,3 @@ class TestSeqPartitionFunction(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-    
-
-

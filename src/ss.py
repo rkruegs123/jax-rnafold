@@ -26,8 +26,9 @@ import vienna
 import vienna_rna
 
 
-from jax.config import config
-config.update("jax_enable_x64", True)
+# from jax.config import config
+# config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 
 
@@ -75,7 +76,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
 
         ls = jnp.arange(seq_len+2)
         all_bp_mms = vmap(get_all_bp_all_mms)(ls)
-        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here. 
+        # OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T) # Note how we take the transpose here.
         OMM = OMM.at[bp_bases[:, 0], bp_bases[:, 1], k].add(all_bp_mms.T)
         return OMM
 
@@ -261,7 +262,7 @@ def get_ss_partition_fn(em, seq_len, max_loop=MAX_LOOP):
                 left_term = P[bk, bl, k, j-2]*padded_p_seq[k, bk] * \
                     padded_p_seq[j-2, bl]*padded_p_seq[k-1, b]*pr_ij_mm*il_en
                 zb_sm += jnp.where(k_cond, left_term, 0.0)
-                
+
                 return zb_sm
 
             def get_z_all_bs_sm(z_offset):
@@ -599,12 +600,12 @@ class TestPartitionFunction(unittest.TestCase):
             print(f"- Calc: {pf_calc}")
             print(f"- Vienna: {pf_vienna}")
             print(f"- Diff: {pf_diff}")
-            
+
             self.assertAlmostEqual(pf_calc, pf_vienna, places=tol_places)
 
     def test_fuzz_vienna(self):
         self.vienna_one_hot_fuzz_test(n=10, n_seq=20, tol_places=3)
-            
+
 
     def test_nn_to_8(self):
 
@@ -649,7 +650,3 @@ class TestPartitionFunction(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

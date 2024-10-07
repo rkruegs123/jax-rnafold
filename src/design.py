@@ -12,8 +12,9 @@ import optax
 from jax import vmap, jit, grad, value_and_grad
 from jax.tree_util import Partial
 import jax.numpy as jnp
-from jax.config import config
-config.update("jax_enable_x64", True)
+# from jax.config import config
+# config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 import energy
 from checkpoint import checkpoint_scan
@@ -228,7 +229,3 @@ if __name__ == "__main__":
     fin_seq = ''.join(nucs)
     print(f"Final argmax sequence: {fin_seq}")
     """
-
-
-
-

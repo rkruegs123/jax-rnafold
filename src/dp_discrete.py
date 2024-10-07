@@ -12,8 +12,9 @@ from utils import HAIRPIN, MAX_LOOP
 from utils import bcolors, CELL_TEMP, kb, R, NON_GC_PAIRS, VALID_PAIRS
 from utils import boltz_onp
 
-from jax.config import config
-config.update("jax_enable_x64", True)
+# from jax.config import config
+# config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
 
 
 vienna_params = read_vienna_params.read(postprocess=False) # read in the dictionary version, not the integer-indexed version
