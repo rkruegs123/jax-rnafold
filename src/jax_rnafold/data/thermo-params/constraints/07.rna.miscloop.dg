@@ -1,0 +1,102 @@
+# File:  	07.rna.miscloop.dg
+#
+# Description:	This file contains miscellaneous loop parameters that do not fit in other tables
+#
+# Parameters:	409-429:21
+#
+# Independent Parameters: 	18
+#
+# Dependent Parameters Files:	None
+#
+# Symmetry:	None
+#
+# References:
+#
+#
+# Miscellaneous free energy rules
+# -------------------------------
+
+# Extrapolation for large loops based on polymer theory
+# internal, bulge or hairpin loops > 30: dS(T)=dS(30)+param*ln(n/30)
+# For extrapolation for loops greater than 30, error is 0.0
+# --> 
+#409
+1.079
+
+# asymmetric internal loops: the ninio equation
+# the maximum correction
+# Might not be used in the software anymore
+# Error is zero, but add a generous error (1.5) tests the robustness of the parameter
+# -->
+#410 
+3.0
+
+# the f(m) array (see Ninio for details)
+# Per nucleotide asymmetric correction - no longer used
+# -->
+#411 412 413 414
+ 0.596892971621  $p411  $p411  $p411
+
+# multibranched loops
+#   offset,  per nuc penalty,  helix penalty
+# Mathews and Turner multibranch
+# No error in per nuc penalty
+# --> 
+#  #415	416	417
+    9.19197207932          -.0                 -0.455003768426
+
+# efn2 multibranched loops
+#    offset,  per nuc penalty,  helix penalty
+# -->
+#418	419	420
+    $p415        $p416               $p417
+    
+# multiloop asym
+# not used in structure prediction - how to implement in dynamic programming - don't scan
+# -->
+#421
+0.673085214439
+
+# multiloop strain
+# not used in structure prediction - how to implement in dynamic programming - don't scan
+# --> 
+#422
+2.29620382703
+
+# terminal AU penalty
+# shah paper
+# --> 
+#423
+ 0.4022305024
+
+# bonus for GGG hairpin
+# --> 
+#424
+-1.93169882802
+
+# c hairpin slope from "08182014 Parameters.xls":Hairpins:FY492
+# --> 
+#425
+0.292282360911
+
+# c hairpin intercept from "08182014 Parameters.xls":Hairpins:FZ492
+# -->
+#426 
+1.67425704002
+
+# c hairpin of 3 from "08182014 Parameters.xls":Hairpins:GA492
+# --> 
+#427
+1.40528552053
+
+# Intermolecular initiation free energy
+# Immaterial for my calculations - only used for bimolecular folding
+# --> 
+#428
+4.21333068318
+
+# Bonus for Single C bulges adjacent to C
+# Empirical value for bulge loops
+# -->
+#429
+-0.939547608543

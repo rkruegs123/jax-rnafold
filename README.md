@@ -1,14 +1,75 @@
 # JAX-RNAfold
 
-This repository contains relevant code for the paper under submission titled "Differentiable Partition Function Calculation for RNA." In this work, we introduce an algorithm for computing the partition function of an RNA sequence that is differentiable. While we demonstrate the utility of this method for designing sequences with a desired secondary structure, our method can be generalized to any loss function of the partition function. Additionally, our current implementation has a high memory cost and therefore can only be run for short/medium length sequences (<50 nt). Stay tuned for an optimized implementation!
+### Automatic differentiable RNA folding in JAX
+[**Paper**](https://www.biorxiv.org/content/10.1101/2023.01.30.526001v2.full) | [**Nucleic Acids Research**](https://academic.oup.com/nar/article/52/3/e14/7457012)
 
-To reproduce the results of our method on the Eterna100 structures of length at most 50, please create a `data/` directory in the base directory and run `python3 src/design.py` from the base directory. Be sure to install JAX per the [installation guide](https://github.com/google/jax#installation).
+This paper contains code for *differentiable RNA folding*, a recently developed method for RNA design in which a probabilistic sequence representation is optimized via gradient descent (see the original paper [here](https://academic.oup.com/nar/article/52/3/e14/7457012)). We provide a highly optimized version of the algorithm. This algorithm can be used to design an RNA sequence to minimize an arbitrary (continuous and differentiable) function of the partition function. Gradient calculation currently scales to sequences at most 1250 nucleotides in length on a single NVIDIA 80 GB A100 GPU.
 
-This code is made available for research purposes only and is not to be used for commercial purposes of any kind.
 
-## Citation
+### Getting Started
 
-Please use refer to the following DOI's for appropriately citing this work:
-- This codebase: [![DOI](https://zenodo.org/badge/593600922.svg)](https://zenodo.org/badge/latestdoi/593600922)
-- Our bioRxiv paper: [![DOI:10.1101/2023.01.30.526001](http://img.shields.io/badge/DOI-10.1101/2023.01.30.526001-B31B1B.svg)](https://doi.org/10.1101/2023.01.30.526001)
+To install JAX RNAfold locally, install it with pip:
+```
+git clone https://github.com/rkruegs123/jax-rnafold
+cd jax-rnafold
+pip install -e .
+```
+Be sure to install JAX per the [installation guide](https://github.com/google/jax#installation).
 
+We use the `unittest` library for testing. After installation, you may run all tests via `python -m unittest discover -s tests -v` from the base directory.
+
+We provide two example scripts in `examples/` for users to get up and running. The first, `eterna_example.py`, is for designing sequences to fold into a target secondary structure from the Eterna100 dataset. The second, `mrna_example.py`, is for mRNA design.
+
+We also provide documentation for a more complete description.
+We use `sphinx` to automate documentation.
+If you want to include the relevant `sphinx` dependencies when installing the package in editable mode, run
+```
+pip install -e ".[docs]"
+```
+If you have already installed the package and only want to install the relevant `sphinx` dependencies, run
+```
+pip install .[docs] --no-deps
+```
+You can then build the documentation and explore it in your local web browser as follows:
+```
+cd docs/
+make html # creates _build/ directory
+open _build/html/index.html
+```
+
+
+
+# Publications
+
+JAX RNAfold has been used in the following publications. If you don't see your paper on the list, but you used JAX RNAfold let us know and we'll add it to the list!
+
+1. [Differentiable partition function calculation for RNA. (NAR 2024)](https://academic.oup.com/nar/article/52/3/e14/7457012)<br> M. C. Matthies, R. Krueger, A. E. Torda, and M. Ward
+2. [Scalable Differentiable Folding for mRNA Design.](https://www.biorxiv.org/content/10.1101/2024.05.29.594436v1)<br> R. Krueger and M. Ward
+
+
+# Citation
+
+If you wish to cite the original algorithm, please cite the following .bib:
+```
+@article{matthies2024differentiable,
+  title={Differentiable partition function calculation for RNA},
+  author={Matthies, Marco C and Krueger, Ryan and Torda, Andrew E and Ward, Max},
+  journal={Nucleic Acids Research},
+  volume={52},
+  number={3},
+  pages={e14--e14},
+  year={2024},
+  publisher={Oxford University Press}
+}
+```
+If you wish to cite this software package and the scaled algorithm, please cite the following .bib:
+```
+@article{krueger2024scalable,
+  title={Scalable Differentiable Folding for mRNA Design},
+  author={Krueger, Ryan and Ward, Max},
+  journal={bioRxiv},
+  pages={2024--05},
+  year={2024},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```

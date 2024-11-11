@@ -1,0 +1,59 @@
+# File:  	08.rna.loop.dg
+#
+# Description:	This table contains the entropic penalty for closing hairpin, internal, 
+#		and bulge loops.  Each has its own penalty based on length.
+#
+# Parameters:	430-514:85
+#
+# Independent Parameters:	13
+#
+# Dependent Parameters Files:	None
+#
+# Symmetry:	None
+#
+# References:
+#
+#
+# Notes
+# Values for Hairpin parameters from "08182014 Parameters.xls":Hairpins:GE492-GK492
+# Values for Bulge Loop parameters from "10182014-bulge coaxial and multibranch parameters.xls":"Multiple nucleotide bulge loops":L18-L19
+
+#DESTABILIZING ENERGIES BY SIZE OF LOOP (INTERPOLATE WHERE NEEDED)
+#hp3 ave calc no tmm;hp4 ave calc with tmm; ave all bulges
+
+#SIZE	INTERNAL          	BULGE 	         	HAIRPIN
+#-------------------------------------------------------
+1	.	3.89316062801	.
+2	.	2.9454386440199998	.
+3	.	3.2504386440200004	5.82786849338
+#	434		435		436
+4	1.00780879605		$p432+p432-p431		5.64190282992
+#	437		438		439
+5	1.85843716779		$p432+2*(p432-p431)	5.92972292889
+#
+6	1.88337683027		$p432+3*(p432-p431)	5.48092403405
+#
+7	$p440+0.1665		$p441+0.1663		6.19435667922	
+8	$p440+0.3107		$p441+0.3103		5.48512452352	
+9	$p440+0.4379		$p441+0.4373		6.54254643476	
+10	$p440+0.5517		$p441+0.5510		$p451+0.1136
+11	$p440+0.6546		$p441+0.6538		$p451+0.2164
+12	$p440+0.7486		$p441+0.7476		$p451+0.3103
+13	$p440+0.8350 		$p441+0.8339		$p451+0.3966
+14	$p440+0.9151		$p441+0.9139		$p451+0.4766
+15	$p440+0.9896		$p441+0.9883		$p451+0.5510
+16	$p440+1.0593		$p441+1.0579		$p451+0.6206
+17	$p440+1.1248		$p441+1.1233		$p451+0.6860
+18	$p440+1.1865		$p441+1.1849		$p451+0.7476
+19	$p440+1.2449		$p441+1.2433		$p451+0.8059
+20	$p440+1.3003		$p441+1.2986		$p451+0.8613
+21	$p440+1.3530		$p441+1.3512		$p451+0.9139
+22	$p440+1.4032		$p441+1.4014		$p451+0.9641
+23	$p440+1.4512		$p441+1.4493		$p451+1.0120
+24	$p440+1.4972		$p441+1.4952		$p451+1.0579
+25	$p440+1.5413		$p441+1.5393		$p451+1.1019
+26	$p440+1.5836		$p441+1.5816		$p451+1.1442
+27	$p440+1.6244		$p441+1.6223		$p451+1.1849
+28	$p440+1.6637		$p441+1.6615		$p451+1.2242
+29	$p440+1.7016		$p441+1.6993		$p451+1.2620
+30	$p440+1.7382		$p441+1.7359		$p451+1.2986

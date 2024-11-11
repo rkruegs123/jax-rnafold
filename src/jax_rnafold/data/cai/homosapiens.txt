@@ -1,0 +1,79 @@
+Gly     GGG    669768.00
+Gly     GGA    669873.00
+Gly     GGT    437126.00
+Gly     GGC    903565.00
+
+Glu     GAG   1609975.00
+Glu     GAA   1177632.00
+Asp     GAT    885429.00
+Asp     GAC   1020595.00
+
+Val     GTG   1143534.00
+Val     GTA    287712.00
+Val     GTT    448607.00
+Val     GTC    588138.00
+
+Ala     GCG    299495.00
+Ala     GCA    643471.00
+Ala     GCT    750096.00
+Ala     GCC   1127679.00
+
+Arg     AGG    486463.00
+Arg     AGA    494682.00
+Ser     AGT    493429.00
+Ser     AGC    791383.00
+
+Lys     AAG   1295568.00
+Lys     AAA    993621.00
+Asn     AAT    689701.00
+Asn     AAC    776603.00
+
+Met     ATG    896005.00
+Ile     ATA    304565.00
+Ile     ATT    650473.00
+Ile     ATC    846466.00
+
+Thr     ACG    246105.00
+Thr     ACA    614523.00
+Thr     ACT    533609.00
+Thr     ACC    768147.00
+
+Trp     TGG    535595.00
+End     TGA     63237.00
+Cys     TGT    430311.00
+Cys     TGC    513028.00
+
+End     TAG     32109.00
+End     TAA     40285.00
+Tyr     TAT    495699.00
+Tyr     TAC    622407.00
+
+Leu     TTG    525688.00
+Leu     TTA    311881.00
+Phe     TTT    714298.00
+Phe     TTC    824692.00
+
+Ser     TCG    179419.00
+Ser     TCA    496448.00
+Ser     TCT    618711.00
+Ser     TCC    718892.00
+
+Arg     CGG    464485.00
+Arg     CGA    250760.00
+Arg     CGT    184609.00
+Arg     CGC    423516.00
+
+Gln     CAG   1391973.00
+Gln     CAA    501911.00
+His     CAT    441711.00
+His     CAC    613713.00
+
+Leu     CTG   1611801.00
+Leu     CTA    290751.00
+Leu     CTT    536515.00
+Leu     CTC    796638.00
+
+Pro     CCG    281570.00
+Pro     CCA    688038.00
+Pro     CCT    713233.00
+Pro     CCC    804620.00

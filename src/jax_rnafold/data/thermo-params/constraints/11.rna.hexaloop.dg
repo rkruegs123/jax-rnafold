@@ -1,0 +1,21 @@
+# File:  	11.rna.hexaloop.dg
+#
+# Description:	This is a lookup table for hairpins of six nucleotides.
+#
+# Parameters:	533-536:4
+#
+# Independent Parameters:	4
+#
+# Dependent Parameters Files:	None
+#
+# Symmetry:	None
+#
+# References:
+#
+#
+# Seq    Energy
+# -------------
+ACAGUGCU	3.0967551697954994
+ACAGUGAU	3.7085931584700003
+ACAGUGUU	1.8349171811209999
+ACAGUACU	2.914917181120999

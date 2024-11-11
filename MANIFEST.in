@@ -1,0 +1,17 @@
+# Include all Python files in src/jax_rnafold
+recursive-include src *.py
+
+# Include all files in the data directory
+recursive-include src/jax_rnafold/data *
+
+# Include tests directory
+recursive-include tests *
+
+# Include documentation files
+recursive-include docs *
+prune docs/_build  # Exclude the Sphinx build output
+
+# Include additional project files
+include README.md
+include setup.py
+include pyproject.toml

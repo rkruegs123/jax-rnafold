@@ -1,0 +1,49 @@
+// Miscellaneous data. This is not machine generated, unlike the other data files.
+// A line must be either a single number, or start with / for a comment.
+
+// 1. Bulge loop data
+// Special C bulge
+-0.9
+
+// 2. Coaxial data
+// mismatch non-continous backbone bonus
+-2.1
+// mismatch is Watson-Crick
+-0.4
+// mismatch is GU
+-0.2
+
+// 3. Hairpin data
+// UU or GA first mismatch
+-0.9
+// GG first mismatch
+-0.8
+// special GU closure
+-2.2
+// C3 loop
+1.5
+// All-C loop, A
+0.3
+// All-C loop, B
+1.6
+
+// 4. Internal loop data
+// Asymmetry coefficient
+0.6
+// Internal loop extra AU penalty
+0.2
+// Internal loop extra GU penalty
+0.2
+
+// 5. Multiloop hack model data
+// This is for the hacky T04 model described in the T04 paper. Doesn't include asymmetry.
+// a constant
+9.3
+// Note that RNAstructure uses -0.6 instead of -0.9, for the hack model.
+// b constant
+-0.6
+
+// 7. AU penalty - note we are using 0.5 instead of the higher precision 0.45
+0.5
+// 8. GU penalty - note we are using 0.5 instead of the higher precision 0.45
+0.5

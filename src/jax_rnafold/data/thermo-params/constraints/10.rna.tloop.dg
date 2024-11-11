@@ -1,0 +1,39 @@
+# File:  	10.rna.tloop.dg
+#
+# Description:	This is the tetraloop bonus table.  For hairpin loops with four unpaired 
+#		nucleotides, this table is consulted.  If the sequence (starting with the 
+#		5’ last paired nucleotide and finishing with its 3’ paired nucleotide) 
+#		appears in the table, the bonus is applied to the hairpin’s stability.
+#
+# Parameters:	517-532:16
+#
+# Independent Parameters:	16
+#
+# Dependent Parameters Files:	None
+#
+# Symmetry:	None
+#
+# References:
+#
+# Notes:
+# Values and errors from "08182014 Parameters.xls":""
+
+# Seq    Energy
+# -------------
+CUACGG	2.9623059793
+CUCCGG	2.86691062434
+CUUCGG	2.2123059793000004
+CUUUGG	3.96270133426
+CCAAGG	3.3638408609800012
+CCCAGG	3.5538408609800007
+CCGAGG	3.713840860980001
+CCUAGG	3.7438408609800002
+CCACGG	3.8238408609800003
+CCGCGG	3.713840860980001
+CCUCGG	2.6138408609800012
+CUAAGG	3.7738408609800014
+CUCAGG	3.7738408609800014
+CUUAGG	3.623840860980001
+CUGCGG	2.963840860980001
+CAACGG	5.613840860980001
+ 
