@@ -1,7 +1,6 @@
 # JAX-RNAfold
 
 ### Automatic differentiable RNA folding in JAX
-[**Paper**](https://www.biorxiv.org/content/10.1101/2023.01.30.526001v2.full) | [**Nucleic Acids Research**](https://academic.oup.com/nar/article/52/3/e14/7457012)
 
 This paper contains code for *differentiable RNA folding*, a recently developed method for RNA design in which a probabilistic sequence representation is optimized via gradient descent (see the original paper [here](https://academic.oup.com/nar/article/52/3/e14/7457012)). We provide a highly optimized version of the algorithm. This algorithm can be used to design an RNA sequence to minimize an arbitrary (continuous and differentiable) function of the partition function. Gradient calculation currently scales to sequences at most 1250 nucleotides in length on a single NVIDIA 80 GB A100 GPU.
 
