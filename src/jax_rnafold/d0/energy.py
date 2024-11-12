@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from typing import Dict
 
 import jax.numpy as jnp
-from jax_md import dataclasses, util
 
 from jax_rnafold.common.utils import RNA_ALPHA, INVALID_BASE, structure_tree, ALL_PAIRS, NON_GC_PAIRS, DEFAULT_HAIRPIN
 from jax_rnafold.common.utils import non_gc_pairs_mat, all_pairs_mat
@@ -14,8 +13,6 @@ from jax_rnafold.common.read_vienna_params import NNParams
 from jax_rnafold.common.energy_hash import float_hash, get_jax_float_hash_fn
 from jax_rnafold.common.utils import boltz_onp, boltz_jnp
 
-
-Array = util.Array
 
 DEFAULT_SPECIAL_HAIRPINS = ["AAA", "AAAA", "AAAAAA"]
 allowed_sp_hairpin_lens = set([3, 4, 6])
@@ -654,136 +651,6 @@ class JaxNNModel(Model):
                                            boltz_jnp(self.nn_params.params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1], t=self.temp),
                                            jnp.where((lup == 2) & (rup == 2),
                                                      boltz_jnp(self.nn_params.params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1], t=self.temp),
-                                                     gen_int))))
-
-        return dg_boltz
-
-
-@dataclasses.dataclass
-class JaxNNModel2():
-
-    special_hairpin_lens: Array
-    special_hairpin_idxs: Array
-    special_hairpin_start_pos: Array
-    special_hairpin_energies: Array
-    n_special_hairpins: int = dataclasses.static_field()
-    thermo_params: Dict
-
-    temp: float = dataclasses.static_field()
-    beta: float = dataclasses.static_field()
-    hairpin: int = dataclasses.static_field()
-
-
-    def en_ext_branch(self, bi, bj):
-        en = non_gc_pairs_mat[bi, bj] * self.thermo_params['non_gc_closing_penalty']
-        return all_pairs_mat[bi, bj] * boltz_jnp(en, t=self.temp)
-
-    def en_multi_branch(self, bi, bk):
-        dg = self.thermo_params['ml_branch']
-        dg += non_gc_pairs_mat[bi, bk] * self.thermo_params['non_gc_closing_penalty']
-
-        return all_pairs_mat[bi, bk] * boltz_jnp(dg, t=self.temp)
-
-    def en_multi_unpaired(self):
-        return boltz_jnp(self.thermo_params['ml_unpaired'], t=self.temp)
-
-    def _en_term_mismatch(self, bim1, bi, bj, bjp1):
-        mm_table = self.thermo_params['mismatch_multi']
-        b_dangle5 = bim1
-        b_dangle3 = bjp1
-        both_dangles_cond = (b_dangle5 != INVALID_BASE) & (b_dangle3 != INVALID_BASE)
-        en = jnp.where(both_dangles_cond, mm_table[bi, bj, b_dangle5, b_dangle3], 0.0)
-        return en
-
-
-    def en_multi_closing(self, bi, bj):
-        closing_pair_dg = self.thermo_params['ml_initiation']
-        closing_pair_dg += self.thermo_params['ml_branch']
-        closing_pair_dg += non_gc_pairs_mat[bi, bj] * self.thermo_params['non_gc_closing_penalty']
-
-        return all_pairs_mat[bi, bj] * boltz_jnp(closing_pair_dg, t=self.temp)
-
-    def en_hairpin_not_special(self, bi, bj, bip1, bjm1, nunpaired):
-        # Note that vienna ignores the all-C case
-        initiation = self.thermo_params['hairpin'][nunpaired] # Note: nunpaired must be less than MAX_PRECOMPUTE
-
-        # only used if u != 3
-        mismatch = self.thermo_params['mismatch_hairpin'][bi, bj, bip1, bjm1]
-
-        # only used if u == 3
-        non_gc_closing_penalty = non_gc_pairs_mat[bi, bj] * self.thermo_params['non_gc_closing_penalty']
-
-        en = jnp.where(nunpaired == 3, initiation + non_gc_closing_penalty, initiation + mismatch)
-        return boltz_jnp(en, t=self.temp)
-
-    def en_hairpin_special(self, id):
-        # id is the index into self.special_hairpins
-        en = self.special_hairpin_energies[id]
-        return boltz_jnp(en, t=self.temp)
-
-    def _en_stack(self, bi, bj, bk, bl):
-        en = self.thermo_params['stack'][bi, bj, bl, bk] # swap bk and bl
-        return en
-    def en_stack(self, bi, bj, bk, bl):
-        return boltz_jnp(self._en_stack(bi, bj, bk, bl), t=self.temp)
-
-    def bulge_initiation(self, u):
-        return self.thermo_params['bulge'][u] # Note: u must be less than MAX_PRECOMPUTE
-
-    def en_bulge(self, bi, bj, bk, bl, nunpaired):
-        bulge_dg = self.bulge_initiation(nunpaired)
-
-        # Note: only used if nunpaired == 1
-        stack_dg = self._en_stack(bi, bj, bk, bl)
-
-        # Note: only used if nunpaired nunpaired != 1
-        gc_penalty_dg = non_gc_pairs_mat[bi, bj] * self.thermo_params['non_gc_closing_penalty'] # FIXME: should these be self.thermo_params (JAX) even though it's a scalar?
-        gc_penalty_dg += non_gc_pairs_mat[bl, bk] * self.thermo_params['non_gc_closing_penalty']
-
-        bulge_dg += jnp.where(nunpaired == 1, stack_dg, gc_penalty_dg)
-        return boltz_jnp(bulge_dg, t=self.temp)
-
-    def _en_il_inner_mismatch(self, bi, bj, bip1, bjm1, mm_table):
-        return boltz_jnp(mm_table[bi, bj, bip1, bjm1], t=self.temp)
-    def en_il_inner_mismatch(self, bi, bj, bip1, bjm1):
-        return self._en_il_inner_mismatch(bi, bj, bip1, bjm1,
-                                          mm_table=self.thermo_params["mismatch_interior"])
-
-    def _en_il_outer_mismatch(self, bi, bj, bim1, bjp1, mm_table):
-        return boltz_jnp(mm_table[bj, bi, bjp1, bim1], t=self.temp)
-    def en_il_outer_mismatch(self, bi, bj, bim1, bjp1):
-        return self._en_il_outer_mismatch(bi, bj, bim1, bjp1,
-                                          mm_table=self.thermo_params["mismatch_interior"])
-
-    def _en_internal_init(self, sz):
-        return self.thermo_params['interior'][sz] # Note: sz must be less than MAX_PRECOMPUTE
-    def en_internal_init(self, sz):
-        return boltz_jnp(self._en_internal_init(sz), t=self.temp)
-
-    def _en_internal_asym(self, lup, rup):
-        return self.thermo_params['asymmetry_matrix'][lup, rup]
-    def en_internal_asym(self, lup, rup):
-        return boltz_jnp(self._en_internal_asym(lup, rup), t=self.temp)
-
-    def en_internal(self, bi, bj, bk, bl, bip1, bjm1, bkm1, blp1, lup, rup):
-        mm_table = jnp.where((lup == 1) | (rup == 1),
-                             self.thermo_params['mismatch_interior_1n'],
-                             jnp.where(((lup == 2) & (rup == 3)) | ((lup == 3) & (rup == 2)),
-                                       self.thermo_params['mismatch_interior_23'],
-                                       self.thermo_params['mismatch_interior']))
-
-        gen_int = self.en_internal_init(lup+rup) * self.en_internal_asym(lup, rup) \
-                  * self._en_il_inner_mismatch(bi, bj, bip1, bjm1, mm_table) \
-                  * self._en_il_outer_mismatch(bk, bl, bkm1, blp1, mm_table)
-
-        dg_boltz = jnp.where((lup == 1) & (rup == 1),
-                             boltz_jnp(self.thermo_params['int11'][bi, bj, bl, bk, bip1, bjm1], t=self.temp),
-                       jnp.where((lup == 1) & (rup == 2),
-                                 boltz_jnp(self.thermo_params['int21'][bi, bj, bl, bk, bip1, blp1, bjm1], t=self.temp),
-                                 jnp.where((lup == 2) & (rup == 1),
-                                           boltz_jnp(self.thermo_params['int21'][bl, bk, bi, bj, blp1, bip1, bkm1], t=self.temp),
-                                           jnp.where((lup == 2) & (rup == 2),
-                                                     boltz_jnp(self.thermo_params['int22'][bi, bj, bl, bk, bip1, bkm1, blp1, bjm1], t=self.temp),
                                                      gen_int))))
 
         return dg_boltz

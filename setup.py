@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="jax_rnafold",
-    version="0.1.0-beta",  # Beta version to signal it's an early release
+    version="2.0.0-beta",  # Beta version to signal it's an early release
     description="A package for differentiable RNA folding and design.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -19,7 +19,10 @@ setup(
         "jax",
         "optax",
         "pandas",
-        "viennarna"
+        "viennarna",
+        "biopython",
+        "matplotlib",
+        "flax"
     ],
     extras_require={
         "docs": ["sphinx", "sphinx-autodoc-typehints", "sphinx-book-theme", "sphinx-copybutton"],

@@ -21,13 +21,9 @@ We provide two example scripts in `examples/` for users to get up and running. T
 
 We also provide documentation for a more complete description.
 We use `sphinx` to automate documentation.
-If you want to include the relevant `sphinx` dependencies when installing the package in editable mode, run
+If you want to include the relevant `sphinx` dependencies, run
 ```
 pip install -e ".[docs]"
-```
-If you have already installed the package and only want to install the relevant `sphinx` dependencies, run
-```
-pip install .[docs] --no-deps
 ```
 You can then build the documentation and explore it in your local web browser as follows:
 ```
