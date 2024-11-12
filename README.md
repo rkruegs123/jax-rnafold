@@ -29,8 +29,6 @@ By default, the CPU version of JAX is installed but be sure to install JAX accor
 
 We use the `unittest` library for testing. After installation, you may run all tests via `python -m unittest discover -s tests -v` from the base directory.
 
-We provide two example scripts in `examples/` for users to get up and running. The first, `eterna_example.py`, is for designing sequences to fold into a target secondary structure from the Eterna100 dataset. The second, `mrna_example.py`, is for mRNA design.
-
 We also provide documentation for a more complete description.
 We use `sphinx` to automate documentation.
 If you want to include the relevant `sphinx` dependencies, run
@@ -42,6 +40,12 @@ You can then build the documentation and explore it in your local web browser as
 cd docs/
 make html # creates _build/ directory
 open _build/html/index.html
+```
+
+We provide two example scripts in `examples/` for users to get up and running. The first, `eterna_example.py`, is for designing sequences to fold into a target secondary structure from the Eterna100 dataset. The second, `mrna_example.py`, is for mRNA design. Before running `mrna_example.py`, please create an `output/` directory for storing results via
+```
+cd path/to/jax-rnafold
+mkdir output
 ```
 
 

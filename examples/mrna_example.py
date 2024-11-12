@@ -68,7 +68,7 @@ class MrnaDesignProblem:
         # Create the run directory
         output_basedir = Path(args['output_dir'])
         if not output_basedir.exists():
-            raise RuntimeError(f"No output directory exists at location: {self.output_basedir}")
+            raise RuntimeError(f"No output base directory exists at location: {self.output_basedir}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         run_name = args['run_name']
         if run_name is None:

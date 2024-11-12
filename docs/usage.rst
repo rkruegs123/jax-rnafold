@@ -6,13 +6,31 @@ Usage
 Installation
 ------------
 
-To install JAX RNAfold locally, install it with pip:
+The following installation instructions were tested on Ubuntu 24.04 LTS with Python 3.10.
+
+To begin, create a fresh environment and activate it. You may do so with conda, e.g.
+
+.. code-block:: console
+
+   conda create -n ENV-NAME python=3.10
+   conda activate ENV-NAME
+
+or with ``venv``, e.g.
+
+.. code-block:: console
+
+   python3 -m venv path/to/ENV-NAME
+   source path/to/ENV-NAME/bin/activate
+
+You may then install JAX RNAfold locally via pip:
 
 .. code-block:: console
 
    git clone https://github.com/rkruegs123/jax-rnafold
    cd jax-rnafold
    pip install -e .
+
+By default, the CPU version of JAX is installed but be sure to install JAX according to your available hardware accelerators per the `installation guide <https://github.com/google/jax#installation>`_.
 
 
 .. _testing:
