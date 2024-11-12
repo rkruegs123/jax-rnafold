@@ -7,13 +7,25 @@ This paper contains code for *differentiable RNA folding*, a recently developed 
 
 ### Getting Started
 
-To install JAX RNAfold locally, install it with pip:
+The following installation instructions were tested on Ubuntu 24.04 LTS with Python 3.10.
+To begin, create a fresh environment and activate it.
+You may do so with conda, e.g.
+```
+conda create -n ENV-NAME python=3.10
+conda activate ENV-NAME
+```
+or with `venv`, e.g.
+```
+python3 -m venv path/to/ENV-NAME
+source path/to/ENV-NAME/bin/activate
+```
+Then, clone this repository and install JAX RNAfold via pip:
 ```
 git clone https://github.com/rkruegs123/jax-rnafold
 cd jax-rnafold
 pip install -e .
 ```
-Be sure to install JAX per the [installation guide](https://github.com/google/jax#installation).
+By default, the CPU version of JAX is installed but be sure to install JAX according to your available hardware accelerators per the [installation guide](https://github.com/google/jax#installation).
 
 We use the `unittest` library for testing. After installation, you may run all tests via `python -m unittest discover -s tests -v` from the base directory.
 
@@ -31,7 +43,6 @@ cd docs/
 make html # creates _build/ directory
 open _build/html/index.html
 ```
-
 
 
 # Publications
