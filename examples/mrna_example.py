@@ -390,7 +390,7 @@ def get_argparse():
                         help="Learning rate for optimization")
     parser.add_argument('-o', '--optimizer', type=str, default="lamb",
                         help='Optimizer for gradient descent')
-    parser.add_argument('--valid-seq-pr-thresh', type=float, default=0.5,
+    parser.add_argument('--valid-seq-pr-thresh', type=float, default=0.99,
                         help="Threshold for valid sequence probability")
 
     ## CAI-specific
